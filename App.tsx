@@ -16,7 +16,7 @@ const INITIAL_SERVICES: ServiceItem[] = [
     type: 'base',
     exclusiveGroup: 'main_service',
     unit: '곡',
-    features: ['음/박 보정 & 기본 FX 포함', '기본 3트랙 제공']
+    features: ['음/박 보정 & 기본 FX 포함 & 기본 3트랙 제공', '1인 기준입니다, 인원 추가는 옵션으로 제공됩니다.']
   },
   {
     id: 'full_mix',
@@ -88,6 +88,14 @@ const INITIAL_OPTIONS: ServiceItem[] = [
     type: 'option',
     unit: '곡'
   },
+  {
+    id: 'live_mic_setting',
+    name: 'LIVE 마이크 세팅',
+    description: '실시간 마이크 세팅입니다.',
+    price: 100000,
+    type: 'option',
+    unit: '1회'
+  },
 ];
 
 export default function App() {
@@ -119,6 +127,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide'>('home');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
+  const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
+  const [isMicSettingInfoChecked, setIsMicSettingInfoChecked] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
   
   // Calculate total price
@@ -161,6 +171,22 @@ export default function App() {
 
   // Generic handler for updating quantity of any item (Base or Option)
   const handleQuantityUpdate = (itemId: string, delta: number) => {
+    // If trying to add live_mic_setting while commercial is on, prevent it.
+    if (itemId === 'live_mic_setting' && delta > 0 && isCommercial) {
+        return; // Or show an alert
+    }
+
+    // Intercept adding 'live_mic_setting' to show modal first
+    if (itemId === 'live_mic_setting' && delta > 0 && !cart.some(i => i.id === itemId)) {
+      setIsMicSettingModalOpen(true);
+      return;
+    }
+
+    // If adding commercial_use, and live_mic_setting is in cart, prevent it.
+    if (itemId === 'commercial_use' && delta > 0 && cart.some(i => i.id === 'live_mic_setting')) {
+      return; // Or show an alert
+    }
+
     setCart(prev => {
       const existing = prev.find(i => i.id === itemId);
       
@@ -185,7 +211,13 @@ export default function App() {
   };
 
   const handleCommercialToggle = () => {
-    setIsCommercial(!isCommercial);
+    const newIsCommercial = !isCommercial;
+    setIsCommercial(newIsCommercial);
+
+    // If turning commercial use ON, remove live mic setting from cart
+    if (newIsCommercial) {
+      setCart(prev => prev.filter(item => item.id !== 'live_mic_setting'));
+    }
   };
 
   const handleCollabPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,6 +231,20 @@ export default function App() {
   };
 
 
+
+  const handleAddMicSettingToCart = () => {
+    if (!isMicSettingInfoChecked) return;
+    const itemDef = options.find(i => i.id === 'live_mic_setting');
+    if (itemDef) {
+      // When adding live_mic_setting, remove commercial_use if it exists
+      setCart(prev => {
+        const newCart = prev.filter(i => i.id !== 'commercial_use');
+        return [...newCart, { id: 'live_mic_setting', quantity: 1, item: itemDef }];
+      });
+    }
+    setIsMicSettingModalOpen(false);
+    setIsMicSettingInfoChecked(false);
+  };
 
   const initiateDownloadProcess = () => {
     // 1. Switch to Guide View
@@ -340,6 +386,83 @@ export default function App() {
         </div>
       </div>
 
+      {/* Live Mic Setting Confirmation Modal */}
+      {isMicSettingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div className="bg-[#111] border border-neutral-800 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative">
+                <button 
+                    onClick={() => setIsMicSettingModalOpen(false)}
+                    className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors"
+                >
+                    <X size={20} />
+                </button>
+                
+                <div className="flex flex-col text-center">
+                    <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center text-neutral-300 mb-6 self-center">
+                        <AlertCircle size={24} />
+                    </div>
+                    
+                    <h3 className="text-xl font-bold text-white mb-4">LIVE 마이크 세팅 숙지사항</h3>
+                    <div className="w-full text-sm text-neutral-400 leading-relaxed mb-6 text-left space-y-4 p-4 bg-[#0a0a0a] rounded-lg border border-neutral-900 max-h-64 overflow-y-auto">
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-neutral-200 text-sm">작업 진행 조건</h4>
+                            <p className="text-xs text-neutral-400">송출에 필요한 라우팅/루프백 설정은 직접 제공되지 않습니다.</p>
+                            <p className="text-xs text-neutral-400">실시간 송출(라우팅)이 불가하면 작업 진행 불가능합니다.</p>
+                            <p className="text-xs text-neutral-400">불법 복제 소프트웨어 "Crack" 설치는 도와드리지 않습니다.</p>
+                        </div>
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-neutral-200 text-sm">책임 범위</h4>
+                            <p className="text-xs text-neutral-400">의뢰자분의 세팅수정/세팅공유로 인한 파일 손상에 대해서는 책임지지 않습니다.</p>
+                            <p className="text-xs text-neutral-400">의뢰자분이 임의로 세팅 값을 수정한 경우, (1회 한정) 수정 정책 적용이 불가합니다.</p>
+                        </div>
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-neutral-200 text-sm">수정 정책</h4>
+                            <p className="text-xs text-neutral-400">세팅 완료 후 24시간 이내 1회에 한해 수정이 가능합니다.</p>
+                            <p className="text-xs text-neutral-400">24시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</p>
+                        </div>
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-neutral-200 text-sm">환불 규정</h4>
+                            <p className="text-xs text-neutral-400">마이크 세팅 진행 중 환불은 불가능합니다.</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full mb-8 bg-[#0a0a0a] p-3 rounded-lg border border-neutral-900 cursor-pointer" onClick={() => setIsMicSettingInfoChecked(!isMicSettingInfoChecked)}>
+                        <input 
+                            type="checkbox"
+                            id="mic-setting-confirm"
+                            checked={isMicSettingInfoChecked}
+                            readOnly
+                            className="h-5 w-5 rounded bg-neutral-900 border-neutral-700 text-purple-500 focus:ring-0 accent-purple-500"
+                        />
+                        <label htmlFor="mic-setting-confirm" className="text-sm text-neutral-300 cursor-pointer">
+                            위 내용을 모두 확인하고 숙지하였습니다.
+                        </label>
+                    </div>
+                    
+                    <div className="flex gap-3 w-full">
+                        <button 
+                            onClick={() => {
+                                setIsMicSettingModalOpen(false);
+                                setIsMicSettingInfoChecked(false); // Reset checkbox
+                            }}
+                            className="flex-1 px-4 py-3 rounded-xl bg-[#1a1a1a] text-neutral-400 text-xs font-medium hover:bg-[#222] hover:text-white transition-colors"
+                        >
+                            취소
+                        </button>
+                        <button 
+                            onClick={handleAddMicSettingToCart}
+                            disabled={!isMicSettingInfoChecked}
+                            className="flex-1 px-4 py-3 rounded-xl bg-white text-black text-xs font-bold hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 disabled:bg-neutral-600 disabled:text-neutral-800 disabled:cursor-not-allowed"
+                        >
+                            <span>장바구니에 추가</span>
+                            <CheckCircle2 size={14} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* Confirmation Modal */}
       {showDownloadConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -459,6 +582,7 @@ export default function App() {
                                     onUpdate={(delta) => handleQuantityUpdate(option.id, delta)}
                                     isCollaboration={isCollaboration}
                                     discountRate={currentDiscountRate}
+                                    isDisabled={(option.id === 'commercial_use' && cart.some(item => item.id === 'live_mic_setting')) || (option.id === 'live_mic_setting' && isCommercial)}
                                 />
                             ))}
                             {/* Commercial Option */}
@@ -471,6 +595,7 @@ export default function App() {
                                     isActive={isCommercial}
                                     isCollaboration={isCollaboration}
                                     discountRate={currentDiscountRate}
+                                    isDisabled={cart.some(item => item.id === 'live_mic_setting')}
                                 />
                             </div>
 
@@ -868,6 +993,44 @@ export default function App() {
                         </div>
 
                         {/* Timeline & Credits */}
+                        {/* LIVE Mic Setting Section */}
+                        <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 hover:border-neutral-800 transition-colors">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Mic2 size={16} className="text-neutral-500" />
+                                <h3 className="text-neutral-400 text-xs font-bold tracking-widest uppercase">LIVE 마이크 세팅</h3>
+                            </div>
+                             <div className="grid md:grid-cols-2 gap-8 text-xs text-neutral-400 leading-relaxed">
+                                <div className="space-y-4">
+                                    <h4 className="text-neutral-300 text-xs font-bold border-b border-neutral-800 pb-2">작업 진행 조건</h4>
+                                    <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
+                                        <li>송출에 필요한 라우팅/루프백 설정은 직접 제공되지 않습니다.</li>
+                                        <li>실시간 송출(라우팅)이 불가하면 작업 진행 불가능합니다.</li>
+                                        <li>불법 복제 소프트웨어 "Crack" 설치는 도와드리지 않습니다.</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-neutral-300 text-xs font-bold border-b border-neutral-800 pb-2">책임 범위</h4>
+                                     <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
+                                        <li>의뢰자분의 세팅수정/세팅공유로 인한 파일 손상에 대해서는 책임지지 않습니다.</li>
+                                        <li>의뢰자분이 임의로 세팅 값을 수정한 경우, (1회 한정) 수정 정책 적용이 불가합니다.</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-neutral-300 text-xs font-bold border-b border-neutral-800 pb-2">수정 정책</h4>
+                                     <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
+                                        <li>세팅 완료 후 24시간 이내 1회에 한해 수정이 가능합니다.</li>
+                                        <li>24시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</li>
+                                    </ul>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-neutral-300 text-xs font-bold border-b border-neutral-800 pb-2">환불 규정</h4>
+                                     <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
+                                        <li>마이크 세팅 진행 중 환불은 불가능합니다.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 hover:border-neutral-800 transition-colors">
                             <div className="flex items-center gap-3 mb-6">
                                 <Award size={16} className="text-neutral-500" />

@@ -10,6 +10,7 @@ interface OptionCardProps {
   isActive?: boolean;
   isCollaboration?: boolean;
   discountRate?: number;
+  isDisabled?: boolean;
 }
 
 export const OptionCard: React.FC<OptionCardProps> = ({ 
@@ -19,7 +20,8 @@ export const OptionCard: React.FC<OptionCardProps> = ({
   isMultiplier = false,
   isActive = false,
   isCollaboration = false,
-  discountRate = 0
+  discountRate = 0,
+  isDisabled = false
 }) => {
   const isSelected = quantity > 0 || isActive;
   const displayPrice = isCollaboration 
@@ -27,13 +29,23 @@ export const OptionCard: React.FC<OptionCardProps> = ({
     : option.price;
 
   return (
-    <div className={`
+    <div 
+      onClick={() => {
+        if (isDisabled) return;
+        if (isMultiplier) {
+          onUpdate(isActive ? 0 : 1);
+        } else {
+          onUpdate(quantity > 0 ? -1 : 1);
+        }
+      }}
+      className={`
       relative px-6 py-5 rounded-xl border transition-all duration-200
       flex justify-between items-center group min-h-[90px]
       ${isMultiplier 
         ? (isActive ? 'bg-[#0F0B1A] border-indigo-900/50' : 'bg-[#0B0810] border-[#1A1625] hover:border-indigo-900/30') 
         : (isSelected ? 'bg-[#0F0F0F] border-neutral-700' : 'bg-[#0a0a0a] border-[#1a1a1a] hover:border-neutral-800')
       }
+      ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
     `}>
       {/* Left Content */}
       <div className="flex-1 pr-6">
@@ -77,10 +89,12 @@ export const OptionCard: React.FC<OptionCardProps> = ({
          {/* Button */}
          {isMultiplier ? (
              <button 
-                onClick={() => onUpdate(isActive ? 0 : 1)}
+                onClick={() => !isDisabled && onUpdate(isActive ? 0 : 1)}
+                disabled={isDisabled}
                 className={`
                    w-8 h-8 rounded-lg flex items-center justify-center transition-colors
                    ${isActive ? 'bg-indigo-600 text-white' : 'bg-[#1A1625] text-indigo-900 hover:bg-[#251f36]'}
+                   disabled:opacity-50 disabled:cursor-not-allowed
                 `}
               >
                 {isActive ? <Check size={16} /> : <Plus size={16} />}
@@ -92,8 +106,9 @@ export const OptionCard: React.FC<OptionCardProps> = ({
          ) : (
             <div className="flex items-center gap-3">
                 <button 
-                    onClick={() => onUpdate(1)}
-                    className="w-8 h-8 rounded-lg bg-[#161616] border border-[#222] text-neutral-400 hover:text-white hover:border-neutral-600 hover:bg-neutral-800 flex items-center justify-center transition-all"
+                    onClick={(e) => { e.stopPropagation(); onUpdate(1); }}
+                    disabled={isDisabled}
+                    className="w-8 h-8 rounded-lg bg-[#161616] border border-[#222] text-neutral-400 hover:text-white hover:border-neutral-600 hover:bg-neutral-800 flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Plus size={14} />
                 </button>
