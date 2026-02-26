@@ -720,14 +720,14 @@ export default function App() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">2nd Password (4 Digits)</label>
+                                        <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">2nd Password</label>
                                         <input 
                                             type="password"
                                             maxLength={4}
                                             value={adminInput.secondPw}
                                             onChange={(e) => setAdminInput({...adminInput, secondPw: e.target.value})}
                                             className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-700 transition-colors"
-                                            placeholder="2차 비밀번호 4자리를 입력하세요"
+                                            placeholder="2차 비밀번호를 입력하세요"
                                         />
                                     </div>
                                 </div>
