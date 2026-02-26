@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, X, Sparkles, Layers, Plus, Minus, Award, Mic2, Users, Radio, Settings, AlertCircle, Cpu, BookOpen, Download, Loader2, CheckCircle2, Trash2, Lock } from 'lucide-react';
+import { ShoppingBag, X, Sparkles, Layers, Plus, Minus, Award, Mic2, Users, Radio, Settings, AlertCircle, Cpu, BookOpen, Download, Loader2, CheckCircle2, Trash2, Lock, MessageCircle } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { ServiceCard } from './components/ServiceCard';
@@ -1171,6 +1171,17 @@ export default function App() {
       <footer className="text-center py-24 text-[10px] text-neutral-600 tracking-[0.3em] font-light">
         THE MILLI MIX <br/><br/> © 2026 THE MILLI MIX. PROFESSIONAL AUDIO ENGINEERING.
       </footer>
+
+      {/* KakaoTalk Floating Button */}
+      <a
+        href="https://open.kakao.com/me/MILLI_MIX"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-8 right-8 bg-[#1C1C1C] border border-neutral-800 text-neutral-400 p-3 rounded-full shadow-lg hover:bg-neutral-800 hover:text-white transition-colors z-50"
+        aria-label="KakaoTalk Inquiry"
+      >
+        <MessageCircle size={28} />
+      </a>
     </div>
   );
 }

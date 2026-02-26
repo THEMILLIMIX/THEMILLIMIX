@@ -14,3 +14,11 @@ export interface CartItem {
   quantity: number;
   item: ServiceItem;
 }
+
+export interface PortfolioItem {
+  id: string;
+  artist: string;
+  title: string;
+  role: string;
+  year: number;
+}
