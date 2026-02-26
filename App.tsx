@@ -116,12 +116,7 @@ export default function App() {
     localStorage.setItem('milli_collab_passwords', btoa(JSON.stringify(collabPasswords)));
   }, [collabPasswords]);
   
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [adminInput, setAdminInput] = useState({ id: '', pw: '', secondPw: '' });
-  const [newCollabPw, setNewCollabPw] = useState('');
-  const [newCollabRate, setNewCollabRate] = useState(0.3);
-  
-  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'admin'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide'>('home');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -203,39 +198,7 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Obfuscated credentials (Base64)
-    // dGhlbWlsbGltaXg= : themillimix
-    // cXdlcXdl : qweqwe
-    // Mjc4NQ== : 2785
-    const encodedId = btoa(adminInput.id);
-    const encodedPw = btoa(adminInput.pw);
-    const encodedSecondPw = btoa(adminInput.secondPw);
 
-    if (encodedId === 'dGhlbWlsbGltaXg=' && encodedPw === 'cXdlcXdl' && encodedSecondPw === 'Mjc4NQ==') {
-      setIsAdminLoggedIn(true);
-    } else if (encodedId === 'dGhlbWlsbGltaXg=' && encodedPw === 'cXdlcXdl' && encodedSecondPw !== 'Mjc4NQ==') {
-      alert('2차 비밀번호가 올바르지 않습니다.');
-    } else {
-      alert('아이디 또는 비밀번호가 올바르지 않습니다.');
-    }
-  };
-
-  const handleAddCollabPassword = (pw: string, rate: number) => {
-    if (pw && !collabPasswords.some(c => c.pw === pw)) {
-      setCollabPasswords([...collabPasswords, { pw, rate }]);
-    }
-  };
-
-  const handlePriceUpdate = (id: string, newPrice: number) => {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, price: newPrice } : s));
-    setOptions(prev => prev.map(o => o.id === id ? { ...o, price: newPrice } : o));
-  };
-
-  const handleDeleteCollabPassword = (pw: string) => {
-    setCollabPasswords(collabPasswords.filter(c => c.pw !== pw));
-  };
 
   const initiateDownloadProcess = () => {
     // 1. Switch to Guide View
@@ -451,12 +414,7 @@ export default function App() {
             >
                 Guide
             </button>
-            <button 
-                onClick={() => setCurrentView('admin')}
-                className={`transition-colors border-b pb-1 ${currentView === 'admin' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-            >
-                Admin
-            </button>
+
         </nav>
       </header>
 
@@ -680,177 +638,7 @@ export default function App() {
                     
                 </div>
             </div>
-        ) : currentView === 'admin' ? (
-            // Admin View
-            <div className="animate-fade-in-up">
-                <div className="max-w-4xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl font-normal text-white mb-4">Admin Dashboard</h2>
-                        <p className="text-xs text-neutral-500 font-light">시스템 관리 및 설정 페이지입니다.</p>
-                    </div>
 
-                    {!isAdminLoggedIn ? (
-                        <div className="max-w-md mx-auto">
-                            <form onSubmit={handleAdminLogin} className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 space-y-6">
-                                <div className="flex flex-col items-center mb-4">
-                                    <div className="w-12 h-12 bg-neutral-900 rounded-xl flex items-center justify-center text-neutral-400 mb-4">
-                                        <Lock size={24} />
-                                    </div>
-                                    <h3 className="text-lg font-medium text-white">관리자 로그인</h3>
-                                </div>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">Admin ID</label>
-                                        <input 
-                                            type="text"
-                                            value={adminInput.id}
-                                            onChange={(e) => setAdminInput({...adminInput, id: e.target.value})}
-                                            className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-700 transition-colors"
-                                            placeholder="아이디를 입력하세요"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">Password</label>
-                                        <input 
-                                            type="password"
-                                            value={adminInput.pw}
-                                            onChange={(e) => setAdminInput({...adminInput, pw: e.target.value})}
-                                            className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-700 transition-colors"
-                                            placeholder="비밀번호를 입력하세요"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">2nd Password</label>
-                                        <input 
-                                            type="password"
-                                            maxLength={4}
-                                            value={adminInput.secondPw}
-                                            onChange={(e) => setAdminInput({...adminInput, secondPw: e.target.value})}
-                                            className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-700 transition-colors"
-                                            placeholder="2차 비밀번호를 입력하세요"
-                                        />
-                                    </div>
-                                </div>
-                                <button 
-                                    type="submit"
-                                    className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-neutral-200 transition-colors text-xs tracking-widest uppercase"
-                                >
-                                    Login
-                                </button>
-                            </form>
-                        </div>
-                    ) : (
-                        <div className="space-y-8">
-                            {/* Password Management */}
-                            <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                                        <Settings size={18} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-medium text-white">협업 업체 비밀번호 관리</h3>
-                                        <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Collaboration Passwords & Rates</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6 mb-8">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">Password</label>
-                                            <input 
-                                                type="text"
-                                                value={newCollabPw}
-                                                onChange={(e) => setNewCollabPw(e.target.value)}
-                                                placeholder="새 비밀번호"
-                                                className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-neutral-700 transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] text-neutral-500 uppercase tracking-widest mb-2">Discount Rate ({Math.round(newCollabRate * 100)}%)</label>
-                                            <div className="flex items-center gap-4 h-[46px]">
-                                                <input 
-                                                    type="range"
-                                                    min="0"
-                                                    max="100"
-                                                    step="5"
-                                                    value={newCollabRate * 100}
-                                                    onChange={(e) => setNewCollabRate(parseInt(e.target.value) / 100)}
-                                                    className="flex-1 h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => {
-                                            handleAddCollabPassword(newCollabPw, newCollabRate);
-                                            setNewCollabPw('');
-                                        }}
-                                        className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-neutral-200 transition-colors text-[10px] tracking-widest uppercase"
-                                    >
-                                        Add Collaboration Partner
-                                    </button>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {collabPasswords.map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-4 rounded-xl bg-[#0d0d0d] border border-neutral-900 group hover:border-neutral-700 transition-colors">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                <div>
-                                                    <span className="text-sm text-neutral-300 font-mono block">{item.pw}</span>
-                                                    <span className="text-[10px] text-neutral-500 font-medium">DISCOUNT: {Math.round(item.rate * 100)}%</span>
-                                                </div>
-                                            </div>
-                                            <button 
-                                                onClick={() => handleDeleteCollabPassword(item.pw)}
-                                                className="w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Price Management */}
-                            <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
-                                        <Cpu size={18} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-medium text-white">서비스 가격 관리</h3>
-                                        <p className="text-[10px] text-neutral-500 uppercase tracking-wider">Service & Option Prices</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    {[...services, ...options].map(item => (
-                                        <div key={item.id} className="flex items-center justify-between">
-                                            <label className="text-sm text-neutral-400">{item.name}</label>
-                                            <input 
-                                                type="number"
-                                                value={item.price}
-                                                onChange={(e) => handlePriceUpdate(item.id, parseInt(e.target.value) || 0)}
-                                                className="w-32 bg-[#111] border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white text-right focus:outline-none focus:border-neutral-700 transition-colors"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="flex justify-center pt-8">
-                                <button 
-                                    onClick={() => setIsAdminLoggedIn(false)}
-                                    className="text-[10px] text-neutral-600 hover:text-white transition-colors uppercase tracking-[0.2em]"
-                                >
-                                    Logout Admin Session
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
         ) : currentView === 'portfolio' ? (
             // Portfolio View
             <div className="animate-fade-in-up">
