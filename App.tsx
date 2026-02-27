@@ -408,7 +408,6 @@ export default function App() {
                             <h4 className="font-bold text-neutral-200 text-sm">작업 진행 조건</h4>
                             <p className="text-xs text-neutral-400">송출에 필요한 라우팅/루프백 설정은 직접 제공되지 않습니다.</p>
                             <p className="text-xs text-neutral-400">실시간 송출(라우팅)이 불가하면 작업 진행 불가능합니다.</p>
-                            <p className="text-xs text-neutral-400">마이크 세팅은 원격프로그램 "Anydesk" 를 사용합니다.</p>
                             <p className="text-xs text-neutral-400">불법 복제 소프트웨어 "Crack" 설치는 도와드리지 않습니다.</p>
                         </div>
                         <div className="space-y-1">
@@ -1006,7 +1005,6 @@ export default function App() {
                                     <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
                                         <li>송출에 필요한 라우팅/루프백 설정은 직접 제공되지 않습니다.</li>
                                         <li>실시간 송출(라우팅)이 불가하면 작업 진행 불가능합니다.</li>
-                                        <li>마이크 세팅은 원격프로그램 "Anydesk" 를 사용합니다.</li>
                                         <li>불법 복제 소프트웨어 "Crack" 설치는 도와드리지 않습니다.</li>
                                     </ul>
                                 </div>

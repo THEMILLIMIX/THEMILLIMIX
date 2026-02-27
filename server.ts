@@ -2,30 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir);
-}
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadsDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
-    }
-});
-
-const upload = multer({ storage: storage });
 
 async function startServer() {
     const app = express();
@@ -57,24 +38,6 @@ async function startServer() {
             res.json({ message: 'Configuration updated successfully' });
         });
     });
-
-    app.post('/api/upload', upload.array('files'), (req, res) => {
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ message: 'No files uploaded' });
-        }
-        
-        const uploadedFiles = (req.files as Express.Multer.File[]).map(file => ({
-            originalName: file.originalname,
-            filename: file.filename,
-            size: file.size,
-            path: `/uploads/${file.filename}`
-        }));
-
-        res.json({ message: 'Files uploaded successfully', files: uploadedFiles });
-    });
-
-    // Serve uploaded files statically
-    app.use('/uploads', express.static(uploadsDir));
 
     // Vite middleware
     const vite = await createViteServer({
