@@ -1,5 +1,5 @@
 {
-  "name": "Mix Mastered : 최종본",
-  "description": "THE MILLI MIX",
-  "requestFramePermissions": []
+  "name": "Live Mic-Check Tool",
+  "description": "A simple tool to test and visualize microphone input, designed for remote support sessions using Anydesk.",
+  "requestFramePermissions": ["microphone"]
 }

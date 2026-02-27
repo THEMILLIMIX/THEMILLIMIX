@@ -89,5 +89,5 @@ export const COMMERCIAL_OPTION: ServiceItem = {
   description: '수익 창출용(음원 발매, 유튜브 수익 창출 등) ( Short 10배 / 그 외 5배 적용 )',
   price: 0, // Multiplier handled separately
   type: 'multiplier',
-  unit: '5x ~ 10x'
+  unit: 'x5.0 ~ 10'
 };
