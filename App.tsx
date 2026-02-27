@@ -810,6 +810,14 @@ export default function App() {
                                 <div className="text-neutral-300 text-sm flex items-center gap-3">
                                     <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
                                     1만 버튜버 믹싱마스터링 경력
+                                     </div>
+                                <div className="text-neutral-300 text-sm flex items-center gap-3">
+                                    <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
+                                    달라라이브 파트너BJ 방송 음향 세팅 경력
+                                      </div>
+                                <div className="text-neutral-300 text-sm flex items-center gap-3">
+                                    <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
+                                    3.5만 구독자 유튜브 팀 소속 아티스트 1인 믹싱마스터링 경력
                                 </div>
                                 <div className="text-neutral-300 text-sm flex items-center gap-3">
                                     <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
