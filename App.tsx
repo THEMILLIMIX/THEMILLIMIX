@@ -823,6 +823,10 @@ export default function App() {
                                     <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
                                     크리에이터 / 개인 작업자 믹싱 마스터링 수백 건 외주 경력
                                 </div>
+                                <div className="text-neutral-300 text-sm flex items-center gap-3">
+                                    <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
+                                    개인 방송BJ / 개인 작업자 방송 음향 세팅 수백 건 외주 경력
+                                </div>
                              </div>
                         </div>
 
