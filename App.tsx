@@ -813,7 +813,7 @@ export default function App() {
                                 </div>
                                 <div className="text-neutral-300 text-sm flex items-center gap-3">
                                     <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
-                                    하꼬 유튜버/개인 작업자 믹싱 마스터링 수백 번 외주 경력
+                                    크리에이터 / 개인 작업자 믹싱 마스터링 수백 건 외주 경력
                                 </div>
                              </div>
                         </div>
@@ -834,6 +834,10 @@ export default function App() {
                                     고등래퍼2 김하온 팀 소속 1차 출연자 믹싱마스터링 경력
                                 </div>
                                 <div className="text-neutral-300 text-sm flex items-center gap-3">
+                                    <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
+                                    사인히어 (SignHere) 3라운드 진출자 믹싱마스터링 경력
+                                </div>
+                                  <div className="text-neutral-300 text-sm flex items-center gap-3">
                                     <span className="w-1 h-1 bg-neutral-700 rounded-full shrink-0"></span>
                                     창현거리노래방 고액 상금 주인공 믹싱마스터링 경력
                                 </div>
