@@ -461,124 +461,166 @@ export const LoudnessMeter: React.FC = () => {
     if (!results || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
 
-    const { width, height, left, right } = results.spectrogram;
-    
-    // Resize canvas
-    canvas.width = width;
-    canvas.height = results.channels >= 2 ? height * 2 + 20 : height; // +20 for separation if stereo
+    const render = () => {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Spectrogram
-    const imgData = ctx.createImageData(width, results.channels >= 2 ? height * 2 + 20 : height);
-    const data = imgData.data;
-
-    const drawChannel = (src: Uint8Array, offsetY: number) => {
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const val = src[x * height + y]; 
-          
-          // Color mapping (Magma-like palette)
-          let r=0, g=0, b=0;
-          if (val < 64) { // Black to Purple
-             r = val * 2; b = val * 4; 
-          } else if (val < 128) { // Purple to Red
-             r = 128 + (val-64)*2; b = 255 - (val-64)*4;
-          } else if (val < 192) { // Red to Yellow
-             r = 255; g = (val-128)*4;
-          } else { // Yellow to White
-             r = 255; g = 255; b = (val-192)*4;
-          }
-
-          const idx = ((y + offsetY) * width + x) * 4;
-          data[idx] = r;
-          data[idx + 1] = g;
-          data[idx + 2] = b;
-          data[idx + 3] = 255;
-        }
-      }
-    };
-
-    drawChannel(left, 0);
-    if (right && results.channels >= 2) {
-      drawChannel(right, height + 20);
-    }
-
-    ctx.putImageData(imgData, 0, 0);
-
-    // Draw Grid and Labels
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-
-    // Time Axis (X)
-    const numTimeLabels = 10;
-    for (let i = 0; i <= numTimeLabels; i++) {
-        const x = (width / numTimeLabels) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
-
-    // Helper for high-contrast text badges
-    const drawBadge = (text: string, x: number, y: number, align: CanvasTextAlign = 'left', color: string = '#ffffff') => {
-        ctx.font = 'bold 11px JetBrains Mono';
-        ctx.textAlign = align;
-        const metrics = ctx.measureText(text);
-        const paddingX = 6;
-        const paddingY = 3;
-        const textHeight = 10;
+        const { width: srcWidth, height, left, right } = results.spectrogram;
         
-        // Background Rect
-        const rectW = metrics.width + paddingX * 2;
-        const rectH = textHeight + paddingY * 2;
+        // Layout constants
+        const margin = { left: 30, right: 40, top: 10, bottom: 10, gap: 20 };
+        const channelHeight = 200; // Fixed display height per channel
         
-        let rectX = x;
-        let rectY = y - textHeight/2 - paddingY; // Center vertically on y
+        // Calculate responsive width
+        // Parent has p-4 (16px * 2 = 32px padding). 
+        // We use parent.clientWidth which includes padding, so we subtract it to get content width.
+        // However, simpler is to use getComputedStyle or just subtract a safe amount.
+        const availableWidth = parent.clientWidth - 32; 
+        const totalWidth = Math.max(availableWidth, 300); // Minimum width safety
+        const graphWidth = totalWidth - margin.left - margin.right;
+        
+        const totalHeight = (results.channels >= 2 ? channelHeight * 2 + margin.gap : channelHeight) + margin.top + margin.bottom;
 
-        if (align === 'right') rectX = x - rectW;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Darker background for better contrast
-        ctx.fillRect(rectX, rectY, rectW, rectH);
-        
-        ctx.fillStyle = color;
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, x + (align === 'right' ? -paddingX : paddingX), y + 1); // +1 for visual centering
-        ctx.textBaseline = 'alphabetic'; // Reset
-    };
+        // High DPI Scaling
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = totalWidth * dpr;
+        canvas.height = totalHeight * dpr;
+        canvas.style.width = `${totalWidth}px`;
+        canvas.style.height = `${totalHeight}px`;
 
-    // Freq Axis (Y)
-    const numFreqLabels = 5;
-    const drawFreqLabels = (offsetY: number) => {
-        for (let i = 0; i <= numFreqLabels; i++) {
-            const y = (height / numFreqLabels) * i;
-            const freq = (results.sampleRate / 2) * (1 - i / numFreqLabels);
+        ctx.scale(dpr, dpr);
+        ctx.imageSmoothingEnabled = false; // Keep spectrogram pixelated
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, totalWidth, totalHeight);
+
+        // Helper to draw a channel's spectrogram data into an ImageData object
+        const createChannelImage = (src: Uint8Array) => {
+            const img = new ImageData(srcWidth, height);
+            const data = img.data;
             
-            // Grid line
-            ctx.beginPath();
-            ctx.moveTo(0, offsetY + y);
-            ctx.lineTo(width, offsetY + y);
-            ctx.stroke();
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < srcWidth; x++) {
+                    const val = src[x * height + y]; 
+                    
+                    // Color mapping (Magma-like palette)
+                    let r=0, g=0, b=0;
+                    if (val < 64) { // Black to Purple
+                        r = val * 2; b = val * 4; 
+                    } else if (val < 128) { // Purple to Red
+                        r = 128 + (val-64)*2; b = 255 - (val-64)*4;
+                    } else if (val < 192) { // Red to Yellow
+                        r = 255; g = (val-128)*4;
+                    } else { // Yellow to White
+                        r = 255; g = 255; b = (val-192)*4;
+                    }
 
-            // Label
-            // Avoid drawing at the very bottom edge if it's 0k (optional, but usually 0k is fine or omitted)
-            if (i < numFreqLabels) {
-               drawBadge(`${Math.round(freq/1000)}k`, width, offsetY + y + 10, 'right', '#cccccc');
+                    const idx = (y * srcWidth + x) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 255;
+                }
             }
+            return img;
+        };
+
+        // Helper to render ImageData to canvas via temp canvas (for scaling support)
+        const renderImageData = (imgData: ImageData, x: number, y: number, w: number, h: number) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = srcWidth;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx) {
+                tempCtx.putImageData(imgData, 0, 0);
+                ctx.drawImage(tempCanvas, 0, 0, srcWidth, height, x, y, w, h);
+            }
+        };
+
+        // Draw Left Channel
+        const leftImg = createChannelImage(left);
+        renderImageData(leftImg, margin.left, margin.top, graphWidth, channelHeight);
+
+        // Draw Right Channel
+        if (right && results.channels >= 2) {
+            const rightImg = createChannelImage(right);
+            renderImageData(rightImg, margin.left, margin.top + channelHeight + margin.gap, graphWidth, channelHeight);
+        }
+
+        // Draw UI Elements (Grid, Labels)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.font = '500 12px Inter, system-ui, sans-serif'; 
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#e5e5e5';
+
+        // Draw Frequency Labels & Grid (Right Side)
+        const drawFreqs = (offsetY: number) => {
+            const targetFreqs = [20000, 15000, 10000, 5000];
+            const nyquist = results.sampleRate / 2;
+
+            targetFreqs.forEach(freq => {
+                if (freq >= nyquist) return;
+
+                const y = channelHeight * (1 - freq / nyquist);
+                const drawY = offsetY + y;
+                
+                // Grid line
+                ctx.beginPath();
+                ctx.moveTo(margin.left, drawY);
+                ctx.lineTo(margin.left + graphWidth, drawY);
+                ctx.stroke();
+
+                // Label (Outside Right)
+                ctx.fillText(`${freq/1000}k`, totalWidth - 5, drawY);
+            });
+        };
+
+        drawFreqs(margin.top);
+        if (results.channels >= 2) {
+            drawFreqs(margin.top + channelHeight + margin.gap);
+        }
+
+        // Draw Channel Labels (Left Side)
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Inter, system-ui, sans-serif';
+        
+        // L Label
+        ctx.fillText('L', margin.left / 2, margin.top + channelHeight / 2);
+
+        // R Label
+        if (results.channels >= 2) {
+            ctx.fillText('R', margin.left / 2, margin.top + channelHeight + margin.gap + channelHeight / 2);
+        }
+
+        // Time Axis Grid
+        const numTimeLabels = 10;
+        for (let i = 0; i <= numTimeLabels; i++) {
+            const x = (graphWidth / numTimeLabels) * i;
+            const drawX = margin.left + x;
+            
+            ctx.beginPath();
+            ctx.moveTo(drawX, margin.top);
+            ctx.lineTo(drawX, totalHeight - margin.bottom);
+            ctx.stroke();
         }
     };
 
-    drawFreqLabels(0);
-    drawBadge('L', 0, 15, 'left', '#ffffff');
+    // Initial render
+    render();
 
-    if (results.channels >= 2) {
-        drawFreqLabels(height + 20);
-        drawBadge('R', 0, height + 35, 'left', '#ffffff');
-    }
+    // Responsive resize
+    const observer = new ResizeObserver(() => {
+        window.requestAnimationFrame(render);
+    });
+    observer.observe(parent);
+
+    return () => observer.disconnect();
 
   }, [results]);
 
@@ -831,22 +873,21 @@ export const LoudnessMeter: React.FC = () => {
 
           <div className="pt-6 border-t border-neutral-900">
             <div className="p-4 bg-neutral-900/30 rounded-xl border border-neutral-800/50 space-y-3">
-              <p className="text-neutral-500 text-[10px] leading-relaxed">
-                * 업로드된 오디오 데이터를 스캔하여 정확한 피크값과 평균 음압 및 주파수 분포를 계산합니다. 
+              <p className="text-neutral-500 text-[14px] leading-relaxed">
+                업로드된 오디오 데이터를 스캔하여 정확한 피크값과 평균 음압 및 주파수 분포를 계산합니다. 
               </p>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-neutral-400 text-[10px] font-bold mb-1">LUFS (Loudness Units Full Scale)</h4>
-                  <p className="text-neutral-600 text-[9px]">
-                    사람이 실제로 느끼는 음량을 측정하는 표준 단위입니다. 
-                    스트리밍 플랫폼(Spotify, YouTube 등)은 보통 -14 LUFS를 기준으로 합니다.
+                  <h4 className="text-neutral-400 text-[12px] font-bold mb-1">LUFS (Loudness Units Full Scale)</h4>
+                  <p className="text-neutral-400 text-[10px]">
+                    사람이 실제로 느끼는 음량을 측정하는 표준 단위입니다.
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-neutral-400 text-[10px] font-bold mb-1">True Peak</h4>
-                  <p className="text-neutral-600 text-[9px]">
-                    디지털 샘플 사이의 실제 아날로그 피크를 예측한 값입니다. 
+                  <h4 className="text-neutral-400 text-[12px] font-bold mb-1">True Peak</h4>
+                  <p className="text-neutral-400 text-[10px]">
+                    디지털 샘플 사이의 실제 아날로그 피크를 예측한 값입니다.<br />
                     0dBTP를 넘으면 DAC 변환 시 클리핑(왜곡)이 발생할 수 있습니다.
                   </p>
                 </div>
