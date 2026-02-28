@@ -98,6 +98,10 @@ const INITIAL_OPTIONS: ServiceItem[] = [
   },
 ];
 
+const INITIAL_COLLAB_PASSWORDS = [
+  { pw: 'U3BlYWt1cF8yMDI2', rate: 0.2 } // Base64 for Speakup_2026
+];
+
 export default function App() {
   const [services, setServices] = useState<ServiceItem[]>(INITIAL_SERVICES);
   const [options, setOptions] = useState<ServiceItem[]>(INITIAL_OPTIONS);
@@ -112,19 +116,28 @@ export default function App() {
       try {
         // Support both old plain text and new encoded format for migration
         const decoded = saved.startsWith('[') ? saved : atob(saved);
-        return JSON.parse(decoded);
+        const parsed = JSON.parse(decoded);
+        
+        // Merge with initial passwords to ensure Speakup_2026 is always available
+        const merged = [...parsed];
+        INITIAL_COLLAB_PASSWORDS.forEach(initial => {
+          if (!merged.some(m => m.pw === initial.pw)) {
+            merged.push(initial);
+          }
+        });
+        return merged;
       } catch (e) {
-        return [];
+        return INITIAL_COLLAB_PASSWORDS;
       }
     }
-    return [];
+    return INITIAL_COLLAB_PASSWORDS;
   });
   
   useEffect(() => {
     localStorage.setItem('milli_collab_passwords', btoa(JSON.stringify(collabPasswords)));
   }, [collabPasswords]);
   
-  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration'>('home');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
@@ -146,7 +159,14 @@ export default function App() {
     : 0;
 
   const beforeDiscount = subtotal + commercialCost;
-  const activeCollab = collabPasswords.find(c => c.pw === collabPassword);
+  const activeCollab = collabPasswords.find(c => {
+    try {
+      // Check if stored password matches the Base64 encoded input
+      return c.pw === btoa(collabPassword);
+    } catch (e) {
+      return false;
+    }
+  });
   const currentDiscountRate = activeCollab ? activeCollab.rate : 0;
   const collabDiscount = isCollaboration ? Math.floor(beforeDiscount * currentDiscountRate) : 0;
   const total = beforeDiscount - collabDiscount;
@@ -223,9 +243,15 @@ export default function App() {
   const handleCollabPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setCollabPassword(val);
-    if (collabPasswords.some(c => c.pw === val)) {
-      setIsCollaboration(true);
-    } else {
+    
+    try {
+      const encodedInput = btoa(val);
+      if (collabPasswords.some(c => c.pw === encodedInput)) {
+        setIsCollaboration(true);
+      } else {
+        setIsCollaboration(false);
+      }
+    } catch (e) {
       setIsCollaboration(false);
     }
   };
@@ -417,8 +443,8 @@ export default function App() {
                         </div>
                         <div className="space-y-1">
                             <h4 className="font-bold text-neutral-200 text-sm">수정 정책</h4>
-                            <p className="text-xs text-neutral-400">세팅 완료 후 24시간 이내 1회에 한해 수정이 가능합니다.</p>
-                            <p className="text-xs text-neutral-400">24시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</p>
+                            <p className="text-xs text-neutral-400">세팅 완료 후 3시간 이내 1회에 한해 수정이 가능합니다.</p>
+                            <p className="text-xs text-neutral-400">3시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</p>
                         </div>
                         <div className="space-y-1">
                             <h4 className="font-bold text-neutral-200 text-sm">환불 규정</h4>
@@ -512,32 +538,39 @@ export default function App() {
             <p className="text-sm md:text-base text-neutral-500 tracking-[0.6em] uppercase">믹싱 마스터링 커미션</p>
         </div>
         
-        <nav className="flex items-center justify-center gap-12 mt-24 text-[11px] font-medium tracking-widest text-neutral-500 uppercase">
+        <nav className="flex flex-col items-center justify-center gap-6 mt-24 text-[11px] font-medium tracking-widest text-neutral-500 uppercase">
+            <div className="flex items-center justify-center gap-12">
+                <button 
+                    onClick={() => setCurrentView('home')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'home' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    Services
+                </button>
+                <button 
+                    onClick={() => setCurrentView('portfolio')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'portfolio' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    Portfolio
+                </button>
+                <button 
+                    onClick={() => setCurrentView('system')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'system' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    System
+                </button>
+                <button 
+                    onClick={() => setCurrentView('guide')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'guide' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    Guide
+                </button>
+            </div>
             <button 
-                onClick={() => setCurrentView('home')}
-                className={`transition-colors border-b pb-1 ${currentView === 'home' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                onClick={() => setCurrentView('collaboration')}
+                className={`transition-colors border-b pb-1 ${currentView === 'collaboration' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
             >
-                Services
+                Collaboration group
             </button>
-            <button 
-                onClick={() => setCurrentView('portfolio')}
-                className={`transition-colors border-b pb-1 ${currentView === 'portfolio' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-            >
-                Portfolio
-            </button>
-            <button 
-                onClick={() => setCurrentView('system')}
-                className={`transition-colors border-b pb-1 ${currentView === 'system' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-            >
-                System
-            </button>
-            <button 
-                onClick={() => setCurrentView('guide')}
-                className={`transition-colors border-b pb-1 ${currentView === 'guide' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-            >
-                Guide
-            </button>
-
         </nav>
       </header>
 
@@ -933,7 +966,7 @@ export default function App() {
                     </div>
                 </div>
             </div>
-        ) : (
+        ) : currentView === 'guide' ? (
             // Guide View
             <div className="animate-fade-in-up">
                 <div className="max-w-5xl mx-auto">
@@ -1034,8 +1067,8 @@ export default function App() {
                                 <div className="space-y-4">
                                     <h4 className="text-neutral-300 text-xs font-bold border-b border-neutral-800 pb-2">수정 정책</h4>
                                      <ul className="list-disc list-inside space-y-1 marker:text-neutral-700">
-                                        <li>세팅 완료 후 24시간 이내 1회에 한해 수정이 가능합니다.</li>
-                                        <li>24시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</li>
+                                        <li>세팅 완료 후 3시간 이내 1회에 한해 수정이 가능합니다.</li>
+                                        <li>3시간 이후에는 기존 세팅에 대한 수정 요청을 받지 않습니다.</li>
                                     </ul>
                                 </div>
                                 <div className="space-y-4">
@@ -1127,6 +1160,69 @@ export default function App() {
                              </div>
                         </div>
 
+                    </div>
+                </div>
+            </div>
+        ) : (
+            // Collaboration View
+            <div className="animate-fade-in-up">
+                <div className="max-w-3xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-2xl font-normal text-white mb-4">Collaboration Group</h2>
+                        <p className="text-xs text-neutral-500 font-light">협업 파트너 및 그룹 안내입니다.</p>
+                    </div>
+
+                    <div className="space-y-8">
+                        {/* Partners */}
+                        <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 hover:border-neutral-800 transition-colors">
+                            <div className="flex items-center gap-3 mb-6">
+                                <Users size={16} className="text-neutral-500" />
+                                <h3 className="text-neutral-400 text-xs font-bold tracking-widest uppercase">Partners</h3>
+                            </div>
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between p-4 bg-[#111] rounded-xl border border-neutral-900">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden border border-neutral-800">
+                                            <img 
+                                                src="https://i.ibb.co/1tYkc440/b-B1mw-OQh-400x400.jpg" 
+                                                alt="SPEAKUP Logo" 
+                                                className="w-full h-full object-cover"
+                                                referrerPolicy="no-referrer"
+                                            />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-neutral-200 text-lg font-medium tracking-[0.2em] uppercase">S P E A K U P</h4>
+                                            <p className="text-neutral-400 text-sm">음악 교류 커뮤니티 스피크업(SPEAKUP)</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-emerald-500 text-[11px] font-bold px-2 py-1 bg-emerald-500/10 rounded-md">
+                                        20% OFF
+                                    </div>
+                                </div>
+                                
+                                <div className="p-4 bg-[#050505] rounded-xl border border-dashed border-neutral-800 flex flex-col items-center justify-center py-12">
+                                    <p className="text-neutral-600 text-[11px] mb-2">새로운 협업 파트너를 기다리고 있습니다.</p>
+                                    <p className="text-neutral-700 text-[10px]">문의: MILLI_MIX (KakaoTalk)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Info */}
+                        <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 hover:border-neutral-800 transition-colors">
+                            <div className="flex items-center gap-3 mb-6">
+                                <AlertCircle size={16} className="text-neutral-500" />
+                                <h3 className="text-neutral-400 text-xs font-bold tracking-widest uppercase">Collaboration Info</h3>
+                            </div>
+                            <div className="space-y-4 text-[11px] text-neutral-400 leading-relaxed">
+                                <p>
+                                    THE MILLI MIX는 다양한 크리에이터 그룹, 방송 팀, 레이블과의 협업을 환영합니다.
+                                </p>
+                                <ul className="list-disc pl-4 space-y-2 marker:text-neutral-700">
+                                    <li>그룹 전용 할인 코드 발급</li>
+                                    <li>우선 작업 배정 혜택</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -80,5 +80,7 @@
       "unit": "곡"
     }
   ],
-  "collabPasswords": []
+  "collabPasswords": [
+    { "pw": "U3BlYWt1cF8yMDI2", "rate": 0.2 }
+  ]
 }
