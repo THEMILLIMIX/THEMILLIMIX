@@ -5,7 +5,6 @@ import html2canvas from "html2canvas";
 import { ServiceCard } from './components/ServiceCard';
 import { OptionCard } from './components/OptionCard';
 import { LoudnessMeter } from './components/LoudnessMeter';
-import { AiMastering } from './components/AiMastering';
 import { COMMERCIAL_OPTION } from './constants';
 import { CartItem, ServiceItem } from './types';
 
@@ -139,7 +138,7 @@ export default function App() {
     localStorage.setItem('milli_collab_passwords', btoa(JSON.stringify(collabPasswords)));
   }, [collabPasswords]);
   
-  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness' | 'ai-mastering'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness'>('home');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
@@ -579,12 +578,6 @@ export default function App() {
                     className={`transition-colors border-b pb-1 ${currentView === 'loudness' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
                 >
                     Meter
-                </button>
-                <button 
-                    onClick={() => setCurrentView('ai-mastering')}
-                    className={`transition-colors border-b pb-1 ${currentView === 'ai-mastering' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-                >
-                    AI Mix Mastering
                 </button>
             </div>
         </nav>
@@ -1190,8 +1183,6 @@ export default function App() {
                     <LoudnessMeter />
                 </div>
             </div>
-        ) : currentView === 'ai-mastering' ? (
-            <AiMastering />
         ) : (
             // Collaboration View
             <div className="animate-fade-in-up">
