@@ -13,47 +13,11 @@ export const AiMastering = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Initialize state from localStorage if available
-  const [isBlocked, setIsBlocked] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('aiMastering_isBlocked') === 'true';
-    }
-    return false;
-  });
-
-  const [blockReason, setBlockReason] = useState<{ title: string; detail: string } | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('aiMastering_blockReason');
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
-  });
-
-  const [offTopicCount, setOffTopicCount] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return parseInt(localStorage.getItem('aiMastering_offTopicCount') || '0', 10);
-    }
-    return 0;
-  });
-
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState<{ title: string; detail: string } | null>(null);
+  const [offTopicCount, setOffTopicCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // Persist state changes to localStorage
-  useEffect(() => {
-    localStorage.setItem('aiMastering_isBlocked', isBlocked.toString());
-  }, [isBlocked]);
-
-  useEffect(() => {
-    if (blockReason) {
-      localStorage.setItem('aiMastering_blockReason', JSON.stringify(blockReason));
-    }
-  }, [blockReason]);
-
-  useEffect(() => {
-    localStorage.setItem('aiMastering_offTopicCount', offTopicCount.toString());
-  }, [offTopicCount]);
 
   // Initialize Gemini AI
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
