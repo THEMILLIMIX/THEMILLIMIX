@@ -18,6 +18,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        chunkSizeWarningLimit: 500,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              vendor: ['react', 'react-dom'],
+              d3: ['d3'],
+              pdf: ['html2canvas', 'jspdf'],
+              genai: ['@google/genai'],
+              ui: ['lucide-react', 'react-markdown']
+            }
+          }
+        }
       }
     };
 });

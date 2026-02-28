@@ -14,6 +14,7 @@ export const AiMastering = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState<{ title: string; detail: string } | null>(null);
   const [offTopicCount, setOffTopicCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,10 @@ export const AiMastering = () => {
 
       if (safetyStatus === 'ILLEGAL') {
         setIsBlocked(true);
+        setBlockReason({
+          title: "🚨 [CRITICAL SECURITY ALERT] 시스템 보안 정책 위반 감지",
+          detail: "자동화 보안 시스템에 의해 정책 위반 가능성이 있는 요청이 감지되었습니다.\n\n서비스 보호를 위해 해당 세션이 제한되었습니다.\n\n반복적인 정책 위반 시 서비스 이용이 제한될 수 있습니다."
+        });
         setMessages(prev => [...prev, { 
           role: 'model', 
           content: `🚨 **[CRITICAL SECURITY ALERT] 시스템 보안 정책 위반 감지**\n\n자동화 보안 시스템에 의해 정책 위반 가능성이 있는 요청이 감지되었습니다.\n\n서비스 보호를 위해 해당 세션이 제한되었습니다.\n\n반복적인 정책 위반 시 서비스 이용이 제한될 수 있습니다.` 
@@ -103,6 +108,10 @@ export const AiMastering = () => {
 
         if (newCount >= 2) {
           setIsBlocked(true);
+          setBlockReason({
+            title: "🚫 [서비스 이용 제한] 반복적인 주제 이탈 감지",
+            detail: "지속적인 주제 이탈로 인해 서비스 이용이 제한되었습니다.\n\n본 서비스는 전문 오디오 엔지니어링 상담 전용입니다."
+          });
           setMessages(prev => [...prev, { 
             role: 'model', 
             content: `🚫 **[서비스 이용 제한] 반복적인 주제 이탈 감지**\n\n지속적인 주제 이탈로 인해 서비스 이용이 제한되었습니다.\n\n본 서비스는 전문 오디오 엔지니어링 상담 전용입니다.` 
@@ -169,6 +178,17 @@ export const AiMastering = () => {
       handleSendMessage();
     }
   };
+
+  if (isBlocked && blockReason) {
+    return (
+      <div className="w-full h-[600px] bg-black flex flex-col items-center justify-center text-white p-8 text-center border border-neutral-800 rounded-2xl">
+        <h2 className="text-2xl font-bold text-red-500 mb-6">{blockReason.title}</h2>
+        <p className="text-neutral-400 whitespace-pre-line leading-relaxed max-w-md">
+          {blockReason.detail}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in pb-12">
