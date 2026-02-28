@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { ServiceCard } from './components/ServiceCard';
 import { OptionCard } from './components/OptionCard';
+import { LoudnessMeter } from './components/LoudnessMeter';
 import { COMMERCIAL_OPTION } from './constants';
 import { CartItem, ServiceItem } from './types';
 
@@ -137,7 +138,7 @@ export default function App() {
     localStorage.setItem('milli_collab_passwords', btoa(JSON.stringify(collabPasswords)));
   }, [collabPasswords]);
   
-  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness'>('home');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
@@ -541,6 +542,14 @@ export default function App() {
         <nav className="flex flex-col items-center justify-center gap-6 mt-24 text-[11px] font-medium tracking-widest text-neutral-500 uppercase">
             <div className="flex items-center justify-center gap-12">
                 <button 
+                    onClick={() => setCurrentView('collaboration')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'collaboration' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    Collaboration group
+                </button>
+            </div>
+            <div className="flex items-center justify-center gap-12">
+                <button 
                     onClick={() => setCurrentView('home')}
                     className={`transition-colors border-b pb-1 ${currentView === 'home' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
                 >
@@ -564,13 +573,13 @@ export default function App() {
                 >
                     Guide
                 </button>
+                <button 
+                    onClick={() => setCurrentView('loudness')}
+                    className={`transition-colors border-b pb-1 ${currentView === 'loudness' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
+                >
+                    Meter
+                </button>
             </div>
-            <button 
-                onClick={() => setCurrentView('collaboration')}
-                className={`transition-colors border-b pb-1 ${currentView === 'collaboration' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
-            >
-                Collaboration group
-            </button>
         </nav>
       </header>
 
@@ -1161,6 +1170,17 @@ export default function App() {
                         </div>
 
                     </div>
+                </div>
+            </div>
+        ) : currentView === 'loudness' ? (
+            // Meter View
+            <div className="animate-fade-in-up">
+                <div className="max-w-3xl mx-auto">
+                    <div className="text-center mb-16">
+                        <h2 className="text-2xl font-normal text-white mb-4">Meter</h2>
+                        <p className="text-xs text-neutral-500 font-light">음압 측정 도구입니다.</p>
+                    </div>
+                    <LoudnessMeter />
                 </div>
             </div>
         ) : (
