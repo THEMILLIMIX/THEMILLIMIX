@@ -9,6 +9,10 @@ interface AnalysisResults {
   spectrum: number[];
   cutoffFreq: number;
   qualityScore: 'lossless' | 'high-lossy' | 'low-lossy' | 'unknown';
+  bitrate: number;
+  sampleRate: number;
+  channels: number;
+  formatDescription: string;
 }
 
 export const LoudnessMeter: React.FC = () => {
@@ -18,12 +22,27 @@ export const LoudnessMeter: React.FC = () => {
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const chartRef = useRef<SVGSVGElement>(null);
 
+  const getFormatDescription = (fileName: string): string => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'wav': return 'WAV : 무압축 무손실';
+      case 'mp3': return 'MP3 : 손실 압축';
+      case 'flac': return 'FLAC : 무손실 압축';
+      case 'm4a': return 'M4A : 손실 압축';
+      case 'alac': return 'ALAC : 무손실 압축';
+      default: return 'Unknown Format';
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/x-wav'].includes(file.type) && !file.name.endsWith('.wav') && !file.name.endsWith('.mp3')) {
-      setError('WAV 또는 MP3 파일만 지원합니다.');
+    const validExtensions = ['wav', 'mp3', 'flac', 'm4a', 'alac'];
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+
+    if (!fileExt || !validExtensions.includes(fileExt)) {
+      setError('지원하지 않는 파일 형식입니다. (WAV, MP3, FLAC, M4A, ALAC 지원)');
       return;
     }
 
@@ -37,20 +56,24 @@ export const LoudnessMeter: React.FC = () => {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       
-      analyzeAudio(audioBuffer);
+      analyzeAudio(audioBuffer, file.size, getFormatDescription(file.name));
     } catch (err) {
       console.error('Error analyzing audio:', err);
-      setError('파일 분석 중 오류가 발생했습니다. 파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.');
+      setError('파일 분석 중 오류가 발생했습니다. 파일이 손상되었거나 브라우저에서 지원하지 않는 형식일 수 있습니다.');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const analyzeAudio = (buffer: AudioBuffer) => {
+  const analyzeAudio = (buffer: AudioBuffer, fileSize: number, formatDescription: string) => {
     const numChannels = buffer.numberOfChannels;
     const length = buffer.length;
     const sampleRate = buffer.sampleRate;
+    const duration = buffer.duration;
     
+    // Calculate Bitrate (kbps)
+    const bitrate = Math.round((fileSize * 8) / duration / 1000);
+
     let maxPeak = 0;
     let sumSquares = 0;
     
@@ -123,7 +146,11 @@ export const LoudnessMeter: React.FC = () => {
       integrated: Math.max(-60, integratedLoudness),
       spectrum: finalSpectrum,
       cutoffFreq,
-      qualityScore: quality
+      qualityScore: quality,
+      bitrate,
+      sampleRate,
+      channels: numChannels,
+      formatDescription
     });
   };
 
@@ -283,6 +310,13 @@ export const LoudnessMeter: React.FC = () => {
     return `${Math.min(100, Math.max(0, percentage))}%`;
   };
 
+  const getBitrateQuality = (bitrate: number) => {
+    if (bitrate >= 1000) return { text: '음질 매우 우수', color: 'text-emerald-500' };
+    if (bitrate > 256) return { text: '음질 우수', color: 'text-emerald-400' };
+    if (bitrate > 128) return { text: '음질 보통', color: 'text-yellow-500' };
+    return { text: '음질 나쁨', color: 'text-orange-500' };
+  };
+
   return (
     <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-8 hover:border-neutral-800 transition-colors">
       <div className="flex items-center justify-between mb-8">
@@ -297,7 +331,7 @@ export const LoudnessMeter: React.FC = () => {
         <label className="relative group cursor-pointer block">
           <input 
             type="file" 
-            accept=".wav,.mp3,audio/wav,audio/mpeg" 
+            accept=".wav,.mp3,.flac,.m4a,.alac,audio/*" 
             className="hidden" 
             onChange={handleFileUpload}
             disabled={isAnalyzing}
@@ -319,7 +353,7 @@ export const LoudnessMeter: React.FC = () => {
                   <p className="text-neutral-300 text-xs font-bold mb-1">
                     {fileName ? fileName : '분석할 오디오 파일을 선택하세요'}
                   </p>
-                  <p className="text-neutral-500 text-[10px]">WAV, MP3 지원 (최대 100MB 권장)</p>
+                  <p className="text-neutral-500 text-[10px]">WAV, MP3, FLAC, M4A, ALAC 지원 (최대 100MB 권장)</p>
                 </div>
               </div>
             )}
@@ -352,7 +386,7 @@ export const LoudnessMeter: React.FC = () => {
 
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
               <div className="space-y-1">
-                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">음원 품질</span>
+                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">주파수 대역 품질</span>
                 <p className="text-neutral-400 text-[10px]">주파수 컷오프 분석: {Math.round(results.cutoffFreq / 100) / 10}kHz</p>
               </div>
               <div className="text-right">
@@ -361,11 +395,38 @@ export const LoudnessMeter: React.FC = () => {
                   results.qualityScore === 'high-lossy' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' :
                   'bg-red-500/10 text-red-500 border border-red-500/20'
                 }`}>
-                  {results.qualityScore === 'lossless' ? '무손실' :
-                   results.qualityScore === 'high-lossy' ? '고음질 손실' :
-                   '저음질 손실'}
+                  {results.qualityScore === 'lossless' ? '주파수 무손실' :
+                   results.qualityScore === 'high-lossy' ? '주파수 일부 손실' :
+                   '주파수 완전 손실'}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* File Info: Bitrate, Sample Rate, Channels */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center">
+              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Format</span>
+              <span className="text-white font-mono font-bold text-xs">{results.formatDescription}</span>
+            </div>
+            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center">
+              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Bitrate</span>
+              <div className="flex flex-col items-center">
+                <span className="text-white font-mono font-bold">{results.bitrate} <span className="text-neutral-500 text-xs">kbps</span></span>
+                <span className={`text-[10px] mt-1 font-medium ${getBitrateQuality(results.bitrate).color}`}>
+                  {getBitrateQuality(results.bitrate).text}
+                </span>
+              </div>
+            </div>
+            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center">
+              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Sample Rate</span>
+              <span className="text-white font-mono font-bold">{results.sampleRate / 1000} <span className="text-neutral-500 text-xs">kHz</span></span>
+            </div>
+            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center">
+              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Channels</span>
+              <span className="text-white font-mono font-bold">
+                {results.channels === 1 ? 'Mono' : results.channels === 2 ? 'Stereo' : `${results.channels} Ch`}
+              </span>
             </div>
           </div>
 
@@ -415,10 +476,32 @@ export const LoudnessMeter: React.FC = () => {
           </div>
 
           <div className="pt-6 border-t border-neutral-900">
-            <div className="p-4 bg-neutral-900/30 rounded-xl border border-neutral-800/50">
+            <div className="p-4 bg-neutral-900/30 rounded-xl border border-neutral-800/50 space-y-3">
               <p className="text-neutral-500 text-[10px] leading-relaxed">
                 * 업로드된 오디오 데이터를 스캔하여 정확한 피크값과 평균 음압 및 주파수 분포를 계산합니다. 
               </p>
+              
+              <div className="border-t border-neutral-800/50 pt-3">
+                <p className="text-neutral-500 text-[10px] font-bold mb-2">Bitrate 품질 기준</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-neutral-500">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                    <span>128kbps 이하: 음질 나쁨</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                    <span>256kbps 이하: 음질 보통</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>320kbps 이하: 음질 우수</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>1000kbps 이상: 음질 매우 우수</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
