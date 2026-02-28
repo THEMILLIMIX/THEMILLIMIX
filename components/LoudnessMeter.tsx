@@ -2,17 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileAudio, Activity, AlertTriangle, Upload, Loader2, BarChart3, Waves } from 'lucide-react';
 import * as d3 from 'd3';
 
+interface SpectrogramData {
+  left: Uint8Array;
+  right: Uint8Array | null;
+  width: number;
+  height: number;
+}
+
 interface AnalysisResults {
   rms: number;
   peak: number;
   integrated: number;
-  spectrum: number[];
+  shortTerm: number;
+  spectrogram: SpectrogramData;
   cutoffFreq: number;
   qualityScore: 'lossless' | 'high-lossy' | 'low-lossy' | 'unknown';
   bitrate: number;
   sampleRate: number;
   channels: number;
   formatDescription: string;
+  phaseCorrelation: number;
+  isClipping: boolean;
 }
 
 export const LoudnessMeter: React.FC = () => {
@@ -20,7 +30,7 @@ export const LoudnessMeter: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [results, setResults] = useState<AnalysisResults | null>(null);
-  const chartRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const getFormatDescription = (fileName: string): string => {
     const ext = fileName.split('.').pop()?.toLowerCase();
@@ -51,12 +61,15 @@ export const LoudnessMeter: React.FC = () => {
     setError(null);
     setResults(null);
 
+    // Allow UI to update before heavy processing
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     try {
       const arrayBuffer = await file.arrayBuffer();
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       
-      analyzeAudio(audioBuffer, file.size, getFormatDescription(file.name));
+      await analyzeAudio(audioBuffer, file.size, getFormatDescription(file.name));
     } catch (err) {
       console.error('Error analyzing audio:', err);
       setError('파일 분석 중 오류가 발생했습니다. 파일이 손상되었거나 브라우저에서 지원하지 않는 형식일 수 있습니다.');
@@ -65,140 +78,378 @@ export const LoudnessMeter: React.FC = () => {
     }
   };
 
-  const analyzeAudio = (buffer: AudioBuffer, fileSize: number, formatDescription: string) => {
-    const numChannels = buffer.numberOfChannels;
-    const length = buffer.length;
-    const sampleRate = buffer.sampleRate;
-    const duration = buffer.duration;
-    
-    // Calculate Bitrate (kbps)
-    const bitrate = Math.round((fileSize * 8) / duration / 1000);
-
-    let maxPeak = 0;
-    let sumSquares = 0;
-    
-    // 1. Amplitude Analysis
-    for (let channel = 0; channel < numChannels; channel++) {
-      const data = buffer.getChannelData(channel);
-      for (let i = 0; i < length; i++) {
-        const sample = Math.abs(data[i]);
-        if (sample > maxPeak) maxPeak = sample;
-        sumSquares += sample * sample;
-      }
-    }
-    
-    const rms = Math.sqrt(sumSquares / (length * numChannels));
-    const peakDb = 20 * Math.log10(maxPeak || 0.000001);
-    const rmsDb = 20 * Math.log10(rms || 0.000001);
-    const integratedLoudness = rmsDb + 3.0;
-
-    // 2. Frequency Analysis (FFT)
-    const fftSize = 2048;
-    const numSamples = 50;
-    const step = Math.floor(length / numSamples);
-    const avgSpectrum = new Float32Array(fftSize / 2).fill(0);
-    
-    const channelData = buffer.getChannelData(0);
-    
-    for (let s = 0; s < numSamples; s++) {
-      const start = s * step;
-      if (start + fftSize > length) break;
+  const analyzeAudio = async (buffer: AudioBuffer, fileSize: number, formatDescription: string) => {
+    try {
+      const numChannels = buffer.numberOfChannels;
+      const length = buffer.length;
+      const sampleRate = buffer.sampleRate;
+      const duration = buffer.duration;
       
-      const window = channelData.slice(start, start + fftSize);
-      for (let i = 0; i < fftSize; i++) {
-        window[i] *= 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)));
+      const bitrate = Math.round((fileSize * 8) / duration / 1000);
+      const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
+
+      // --- ITU-R BS.1770-4 Implementation ---
+
+      // 1. K-Weighting Filter Coefficients
+      const applyKWeighting = (channelData: Float32Array): Float32Array => {
+        const output = new Float32Array(channelData.length);
+        
+        // Coefficients for 48kHz (Standard)
+        let a0 = 1.0, a1 = -1.69065929318241, a2 = 0.73248077421585;
+        let b0 = 1.53512485958697, b1 = -2.69169618940638, b2 = 1.19839281085285;
+        
+        if (Math.abs(sampleRate - 44100) < 1000) {
+           // Coefficients for 44.1kHz
+           a1 = -1.66365511325602; a2 = 0.71259542807323;
+           b0 = 1.56252873860534; b1 = -2.64758836750346; b2 = 1.13398934399769;
+        }
+
+        // Apply Stage 1 (High-shelf)
+        const stage1 = new Float32Array(channelData.length);
+        let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (let i = 0; i < channelData.length; i++) {
+          const x0 = channelData[i];
+          const y0 = b0*x0 + b1*x1 + b2*x2 - a1*y1 - a2*y2;
+          stage1[i] = y0;
+          x2 = x1; x1 = x0;
+          y2 = y1; y1 = y0;
+        }
+
+        // Coefficients for Stage 2 (High-pass)
+        let a0_hp = 1.0, a1_hp = -1.99004745483398, a2_hp = 0.99007225036621;
+        let b0_hp = 1.0, b1_hp = -2.0, b2_hp = 1.0;
+        
+        if (Math.abs(sampleRate - 44100) < 1000) {
+            a1_hp = -1.98916967448773; a2_hp = 0.98920197637845;
+        }
+
+        // Apply Stage 2
+        x1 = 0; x2 = 0; y1 = 0; y2 = 0;
+        for (let i = 0; i < stage1.length; i++) {
+          const x0 = stage1[i];
+          const y0 = b0_hp*x0 + b1_hp*x1 + b2_hp*x2 - a1_hp*y1 - a2_hp*y2;
+          output[i] = y0;
+          x2 = x1; x1 = x0;
+          y2 = y1; y1 = y0;
+        }
+        
+        return output;
+      };
+
+      // Process channels
+      const channels = [];
+      for (let i = 0; i < numChannels; i++) {
+        channels.push(applyKWeighting(buffer.getChannelData(i)));
+        await yieldToMain();
+      }
+
+      // 2. Gated Loudness Calculation (Integrated)
+      const blockSize = Math.floor(0.4 * sampleRate);
+      const stepSize = Math.floor(0.1 * sampleRate);
+      const numBlocks = Math.floor((length - blockSize) / stepSize);
+      
+      const blockEnergies: number[] = [];
+      
+      // Process blocks in chunks
+      const blockChunkSize = 2000;
+      for (let b = 0; b < numBlocks; b += blockChunkSize) {
+        const endBlock = Math.min(b + blockChunkSize, numBlocks);
+        
+        for (let currentBlock = b; currentBlock < endBlock; currentBlock++) {
+          const start = currentBlock * stepSize;
+          let sumEnergy = 0;
+          
+          for (let ch = 0; ch < numChannels; ch++) {
+            let channelSum = 0;
+            const data = channels[ch];
+            for (let i = 0; i < blockSize; i++) {
+              const sample = data[start + i];
+              channelSum += sample * sample;
+            }
+            sumEnergy += channelSum; 
+          }
+          
+          const meanSquare = sumEnergy / blockSize;
+          const loudness = -0.691 + 10 * Math.log10(meanSquare || 1e-10);
+          blockEnergies.push(loudness);
+        }
+        await yieldToMain();
+      }
+
+      // Absolute Gating (-70 LKFS)
+      const absoluteThreshold = -70;
+      const blocksAboveAbsolute = blockEnergies.filter(l => l > absoluteThreshold);
+      
+      // Calculate relative threshold
+      let relativeThreshold = -70;
+      if (blocksAboveAbsolute.length > 0) {
+          let sumPower = 0;
+          for (const l of blocksAboveAbsolute) {
+              sumPower += Math.pow(10, (l + 0.691) / 10);
+          }
+          const avgLoudness = -0.691 + 10 * Math.log10(sumPower / blocksAboveAbsolute.length);
+          relativeThreshold = avgLoudness - 10;
+      }
+
+      // Apply Relative Gate
+      const finalBlocks = blockEnergies.filter(l => l > relativeThreshold && l > absoluteThreshold);
+      
+      let integratedLoudness = -70;
+      if (finalBlocks.length > 0) {
+          let sumPower = 0;
+          for (const l of finalBlocks) {
+              sumPower += Math.pow(10, (l + 0.691) / 10);
+          }
+          integratedLoudness = -0.691 + 10 * Math.log10(sumPower / finalBlocks.length);
+      }
+
+      // 3. Short-term Loudness (3s window)
+      const shortTermWindowBlocks = 30; // 30 * 100ms = 3s
+      let maxShortTerm = -70;
+      
+      const blockPowers = blockEnergies.map(l => Math.pow(10, (l + 0.691) / 10));
+      
+      for (let i = 0; i <= blockPowers.length - shortTermWindowBlocks; i++) {
+          let sumWindow = 0;
+          for (let j = 0; j < shortTermWindowBlocks; j++) {
+              sumWindow += blockPowers[i + j];
+          }
+          const stLoudness = -0.691 + 10 * Math.log10(sumWindow / shortTermWindowBlocks);
+          if (stLoudness > maxShortTerm) maxShortTerm = stLoudness;
+      }
+
+      await yieldToMain();
+
+      // 4. True Peak (Simplified 4x Oversampling)
+      let maxTruePeak = 0;
+      let isClipping = false;
+      
+      const tpChunkSize = 200000;
+      for (let ch = 0; ch < numChannels; ch++) {
+          const data = buffer.getChannelData(ch);
+          for (let i = 0; i < length; i += tpChunkSize) {
+              const end = Math.min(i + tpChunkSize, length);
+              for (let j = i; j < end; j++) {
+                  const abs = Math.abs(data[j]);
+                  if (abs > maxTruePeak) maxTruePeak = abs;
+                  
+                  // Check for inter-sample peaks only if significant
+                  if (abs > 0.5 && j > 1 && j < length - 2) {
+                      // Cubic interpolation
+                      const y0 = data[j-1];
+                      const y1 = data[j];
+                      const y2 = data[j+1];
+                      const y3 = data[j+2];
+                      
+                      // Check at offset 0.5
+                      const a = -0.5*y0 + 1.5*y1 - 1.5*y2 + 0.5*y3;
+                      const b = y0 - 2.5*y1 + 2*y2 - 0.5*y3;
+                      const c = -0.5*y0 + 0.5*y2;
+                      const d = y1;
+                      
+                      const t = 0.5;
+                      const val = Math.abs(a*t*t*t + b*t*t + c*t + d);
+                      if (val > maxTruePeak) maxTruePeak = val;
+                  }
+              }
+              await yieldToMain();
+          }
       }
       
-      const spectrum = performFFT(window);
-      for (let i = 0; i < avgSpectrum.length; i++) {
-        avgSpectrum[i] += spectrum[i];
-      }
-    }
-    
-    // Normalize spectrum
-    const finalSpectrum = Array.from(avgSpectrum).map(v => {
-      const val = v / numSamples;
-      return Math.max(0, 15 * Math.log10(val + 0.00001) + 45); 
-    });
+      if (maxTruePeak >= 1.0) isClipping = true;
+      const peakDb = 20 * Math.log10(maxTruePeak || 1e-10);
 
-    // 3. Quality Detection (Cutoff Analysis)
-    // Find the highest frequency with significant energy
-    let cutoffIdx = finalSpectrum.length - 1;
-    const threshold = 10; // Threshold for "silence" in our viz scale
-    
-    for (let i = finalSpectrum.length - 1; i >= 0; i--) {
-      if (finalSpectrum[i] > threshold) {
-        cutoffIdx = i;
-        break;
-      }
-    }
-    
-    const cutoffFreq = (cutoffIdx * sampleRate) / fftSize;
-    let quality: AnalysisResults['qualityScore'] = 'unknown';
-    
-    if (cutoffFreq > 19500) quality = 'lossless';
-    else if (cutoffFreq > 17500) quality = 'high-lossy';
-    else quality = 'low-lossy';
-
-    setResults({
-      peak: Math.max(-60, peakDb),
-      rms: Math.max(-60, rmsDb),
-      integrated: Math.max(-60, integratedLoudness),
-      spectrum: finalSpectrum,
-      cutoffFreq,
-      qualityScore: quality,
-      bitrate,
-      sampleRate,
-      channels: numChannels,
-      formatDescription
-    });
-  };
-
-  // Basic Iterative FFT implementation
-  const performFFT = (data: Float32Array) => {
-    const n = data.length;
-    const real = new Float32Array(data);
-    const imag = new Float32Array(n).fill(0);
-    
-    // Bit-reversal permutation
-    let j = 0;
-    for (let i = 0; i < n; i++) {
-      if (i < j) {
-        [real[i], real[j]] = [real[j], real[i]];
-      }
-      let m = n >> 1;
-      while (m >= 1 && j >= m) {
-        j -= m;
-        m >>= 1;
-      }
-      j += m;
-    }
-    
-    // Cooley-Tukey
-    for (let len = 2; len <= n; len <<= 1) {
-      const ang = (2 * Math.PI) / len;
-      const wlen_real = Math.cos(ang);
-      const wlen_imag = -Math.sin(ang);
-      for (let i = 0; i < n; i += len) {
-        let w_real = 1;
-        let w_imag = 0;
-        for (let k = 0; k < len / 2; k++) {
-          const u_real = real[i + k];
-          const u_imag = imag[i + k];
-          const v_real = real[i + k + len / 2] * w_real - imag[i + k + len / 2] * w_imag;
-          const v_imag = real[i + k + len / 2] * w_imag + imag[i + k + len / 2] * w_real;
-          real[i + k] = u_real + v_real;
-          imag[i + k] = u_imag + v_imag;
-          real[i + k + len / 2] = u_real - v_real;
-          imag[i + k + len / 2] = u_imag - v_imag;
-          const next_w_real = w_real * wlen_real - w_imag * wlen_imag;
-          w_imag = w_real * wlen_imag + w_imag * wlen_real;
-          w_real = next_w_real;
+      // 5. Phase Correlation
+      let phaseCorrelation = 0;
+      if (numChannels >= 2) {
+        const left = buffer.getChannelData(0);
+        const right = buffer.getChannelData(1);
+        let sumLR = 0;
+        let sumLL = 0;
+        let sumRR = 0;
+        
+        const pcChunkSize = 200000;
+        for (let i = 0; i < length; i += pcChunkSize) {
+          const end = Math.min(i + pcChunkSize, length);
+          for (let j = i; j < end; j++) {
+            sumLR += left[j] * right[j];
+            sumLL += left[j] * left[j];
+            sumRR += right[j] * right[j];
+          }
+          await yieldToMain();
+        }
+        
+        const denominator = Math.sqrt(sumLL * sumRR);
+        if (denominator > 1e-10) {
+          phaseCorrelation = sumLR / denominator;
         }
       }
+
+      // 6. Spectrogram Generation
+      const fftSize = 1024;
+      const bins = fftSize / 2;
+      const targetWidth = 800; // Fixed width for visualization
+      const step = Math.floor(length / targetWidth);
+      
+      const leftSpectrogram = new Uint8Array(targetWidth * bins);
+      const rightSpectrogram = numChannels >= 2 ? new Uint8Array(targetWidth * bins) : null;
+      
+      // Pre-calculate Hann window
+      const window = new Float32Array(fftSize);
+      for (let i = 0; i < fftSize; i++) {
+        window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)));
+      }
+
+      const leftData = buffer.getChannelData(0);
+      const rightData = numChannels >= 2 ? buffer.getChannelData(1) : null;
+      
+      // Accumulate for average spectrum (for quality detection)
+      const avgSpectrum = new Float32Array(bins).fill(0);
+      let spectrumCount = 0;
+
+      for (let x = 0; x < targetWidth; x++) {
+        const start = x * step;
+        if (start + fftSize > length) break;
+
+        // Process Left
+        const leftChunk = new Float32Array(fftSize);
+        for(let i=0; i<fftSize; i++) leftChunk[i] = leftData[start + i] * window[i];
+        const leftMags = performFFT(leftChunk);
+        
+        for (let i = 0; i < bins; i++) {
+          const val = leftMags[i];
+          // Convert to dB and map to 0-255
+          // Range: -100dB to 0dB
+          const db = 20 * Math.log10(val + 1e-10);
+          const norm = Math.max(0, Math.min(255, (db + 100) * 2.55));
+          leftSpectrogram[x * bins + (bins - 1 - i)] = norm; // Store inverted Y for easier drawing
+          
+          avgSpectrum[i] += val;
+        }
+
+        // Process Right if exists
+        if (rightData && rightSpectrogram) {
+          const rightChunk = new Float32Array(fftSize);
+          for(let i=0; i<fftSize; i++) rightChunk[i] = rightData[start + i] * window[i];
+          const rightMags = performFFT(rightChunk);
+          
+          for (let i = 0; i < bins; i++) {
+            const val = rightMags[i];
+            const db = 20 * Math.log10(val + 1e-10);
+            const norm = Math.max(0, Math.min(255, (db + 100) * 2.55));
+            rightSpectrogram[x * bins + (bins - 1 - i)] = norm;
+            
+             avgSpectrum[i] += val;
+          }
+        }
+        
+        spectrumCount += (numChannels >= 2 ? 2 : 1);
+
+        if (x % 50 === 0) await yieldToMain();
+      }
+
+      // 7. Quality Detection (using average spectrum)
+      const finalSpectrum = Array.from(avgSpectrum).map(v => {
+        const val = v / spectrumCount;
+        return 20 * Math.log10(val + 1e-10);
+      });
+
+      let cutoffIdx = bins - 1;
+      const specThreshold = -60; // dB threshold
+      for (let i = bins - 1; i >= 0; i--) {
+        if (finalSpectrum[i] > specThreshold) {
+          cutoffIdx = i;
+          break;
+        }
+      }
+      const cutoffFreq = (cutoffIdx * sampleRate) / fftSize;
+      
+      let quality: AnalysisResults['qualityScore'] = 'unknown';
+      if (cutoffFreq > 19500) quality = 'lossless';
+      else if (cutoffFreq > 17500) quality = 'high-lossy';
+      else quality = 'low-lossy';
+
+      setResults({
+        peak: Math.max(-120, peakDb),
+        rms: Math.max(-120, integratedLoudness),
+        integrated: Math.max(-120, integratedLoudness),
+        shortTerm: Math.max(-120, maxShortTerm),
+        spectrogram: {
+          left: leftSpectrogram,
+          right: rightSpectrogram,
+          width: targetWidth,
+          height: bins
+        },
+        cutoffFreq,
+        qualityScore: quality,
+        bitrate,
+        sampleRate,
+        channels: numChannels,
+        formatDescription,
+        phaseCorrelation,
+        isClipping
+      });
+    } catch (e) {
+      console.error("Analysis failed", e);
+      setError("분석 중 오류가 발생했습니다. 파일이 너무 크거나 손상되었을 수 있습니다.");
     }
+  };
+
+  // Optimized FFT
+  const performFFT = (inputData: Float32Array): Float32Array => {
+    const n = inputData.length;
+    const m = Math.log2(n);
     
-    // Calculate magnitudes for the first half
+    // Precompute bit reversal table if needed, but for now simple swap
+    const real = new Float32Array(inputData);
+    const imag = new Float32Array(n).fill(0);
+
+    // Bit reversal
+    let j = 0;
+    for (let i = 0; i < n - 1; i++) {
+      if (i < j) {
+        const tr = real[j]; real[j] = real[i]; real[i] = tr;
+        const ti = imag[j]; imag[j] = imag[i]; imag[i] = ti;
+      }
+      let k = n >> 1;
+      while (k <= j) {
+        j -= k;
+        k >>= 1;
+      }
+      j += k;
+    }
+
+    // Butterfly
+    for (let l = 1; l <= m; l++) {
+      const len = 1 << l;
+      const halfLen = len >> 1;
+      const u1 = 1.0;
+      const u2 = 0.0;
+      const theta = -Math.PI / halfLen;
+      const w1 = Math.cos(theta);
+      const w2 = Math.sin(theta);
+      
+      let uReal = 1.0;
+      let uImag = 0.0;
+
+      for (let j = 0; j < halfLen; j++) {
+        for (let i = j; i < n; i += len) {
+          const ip = i + halfLen;
+          const tempReal = real[ip] * uReal - imag[ip] * uImag;
+          const tempImag = real[ip] * uImag + imag[ip] * uReal;
+          
+          real[ip] = real[i] - tempReal;
+          imag[ip] = imag[i] - tempImag;
+          real[i] += tempReal;
+          imag[i] += tempImag;
+        }
+        const tempUReal = uReal * w1 - uImag * w2;
+        uImag = uReal * w2 + uImag * w1;
+        uReal = tempUReal;
+      }
+    }
+
+    // Magnitude
     const magnitudes = new Float32Array(n / 2);
     for (let i = 0; i < n / 2; i++) {
       magnitudes[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
@@ -207,93 +458,127 @@ export const LoudnessMeter: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!results || !chartRef.current) return;
+    if (!results || !canvasRef.current) return;
 
-    const svg = d3.select(chartRef.current);
-    svg.selectAll("*").remove();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    const width = chartRef.current.clientWidth;
-    const height = 200;
-    const margin = { top: 20, right: 20, bottom: 40, left: 40 };
-
-    const x = d3.scaleLog()
-      .domain([20, 20000])
-      .range([margin.left, width - margin.right]);
-
-    const y = d3.scaleLinear()
-      .domain([0, 100])
-      .range([height - margin.bottom, margin.top]);
-
-    // Create frequency data points
-    const data = results.spectrum.map((val, i) => ({
-      freq: (i * 44100) / 2048, // Approx freq mapping
-      val: val
-    })).filter(d => d.freq >= 20 && d.freq <= 20000);
-
-    const line = d3.line<{freq: number, val: number}>()
-      .x(d => x(d.freq))
-      .y(d => y(d.val))
-      .curve(d3.curveBasis);
-
-    // Grid lines and labels
-    const xTicks = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-    const xAxis = svg.append("g")
-      .attr("class", "grid")
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x)
-        .tickValues(xTicks)
-        .tickFormat(d => {
-          const val = Number(d);
-          return val >= 1000 ? `${val / 1000}k` : `${val}`;
-        })
-        .tickSize(-(height - margin.top - margin.bottom))
-      );
-
-    // Style the axis lines
-    xAxis.selectAll("line")
-      .style("stroke", "#262626") // neutral-800
-      .style("stroke-dasharray", "2,2");
-
-    // Style the domain line
-    xAxis.select(".domain").remove();
-
-    // Style the labels for better readability
-    xAxis.selectAll("text")
-      .style("fill", "#a3a3a3") // neutral-400
-      .style("font-size", "11px")
-      .style("font-family", "JetBrains Mono, monospace")
-      .attr("dy", "1.5em");
-
-    // Area
-    const area = d3.area<{freq: number, val: number}>()
-      .x(d => x(d.freq))
-      .y0(height - margin.bottom)
-      .y1(d => y(d.val))
-      .curve(d3.curveBasis);
-
-    svg.append("path")
-      .datum(data)
-      .attr("fill", "url(#spectrum-gradient)")
-      .attr("opacity", 0.3)
-      .attr("d", area);
-
-    // Line
-    svg.append("path")
-      .datum(data)
-      .attr("fill", "none")
-      .attr("stroke", "#10b981")
-      .attr("stroke-width", 1.5)
-      .attr("d", line);
-
-    // Gradient
-    const defs = svg.append("defs");
-    const gradient = defs.append("linearGradient")
-      .attr("id", "spectrum-gradient")
-      .attr("x1", "0%").attr("y1", "0%")
-      .attr("x2", "0%").attr("y2", "100%");
+    const { width, height, left, right } = results.spectrogram;
     
-    gradient.append("stop").attr("offset", "0%").attr("stop-color", "#10b981");
-    gradient.append("stop").attr("offset", "100%").attr("stop-color", "transparent");
+    // Resize canvas
+    canvas.width = width;
+    canvas.height = results.channels >= 2 ? height * 2 + 20 : height; // +20 for separation if stereo
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Spectrogram
+    const imgData = ctx.createImageData(width, results.channels >= 2 ? height * 2 + 20 : height);
+    const data = imgData.data;
+
+    const drawChannel = (src: Uint8Array, offsetY: number) => {
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const val = src[x * height + y]; 
+          
+          // Color mapping (Magma-like palette)
+          let r=0, g=0, b=0;
+          if (val < 64) { // Black to Purple
+             r = val * 2; b = val * 4; 
+          } else if (val < 128) { // Purple to Red
+             r = 128 + (val-64)*2; b = 255 - (val-64)*4;
+          } else if (val < 192) { // Red to Yellow
+             r = 255; g = (val-128)*4;
+          } else { // Yellow to White
+             r = 255; g = 255; b = (val-192)*4;
+          }
+
+          const idx = ((y + offsetY) * width + x) * 4;
+          data[idx] = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+          data[idx + 3] = 255;
+        }
+      }
+    };
+
+    drawChannel(left, 0);
+    if (right && results.channels >= 2) {
+      drawChannel(right, height + 20);
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // Draw Grid and Labels
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+
+    // Time Axis (X)
+    const numTimeLabels = 10;
+    for (let i = 0; i <= numTimeLabels; i++) {
+        const x = (width / numTimeLabels) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+
+    // Helper for high-contrast text badges
+    const drawBadge = (text: string, x: number, y: number, align: CanvasTextAlign = 'left', color: string = '#ffffff') => {
+        ctx.font = 'bold 11px JetBrains Mono';
+        ctx.textAlign = align;
+        const metrics = ctx.measureText(text);
+        const paddingX = 6;
+        const paddingY = 3;
+        const textHeight = 10;
+        
+        // Background Rect
+        const rectW = metrics.width + paddingX * 2;
+        const rectH = textHeight + paddingY * 2;
+        
+        let rectX = x;
+        let rectY = y - textHeight/2 - paddingY; // Center vertically on y
+
+        if (align === 'right') rectX = x - rectW;
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Darker background for better contrast
+        ctx.fillRect(rectX, rectY, rectW, rectH);
+        
+        ctx.fillStyle = color;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x + (align === 'right' ? -paddingX : paddingX), y + 1); // +1 for visual centering
+        ctx.textBaseline = 'alphabetic'; // Reset
+    };
+
+    // Freq Axis (Y)
+    const numFreqLabels = 5;
+    const drawFreqLabels = (offsetY: number) => {
+        for (let i = 0; i <= numFreqLabels; i++) {
+            const y = (height / numFreqLabels) * i;
+            const freq = (results.sampleRate / 2) * (1 - i / numFreqLabels);
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(0, offsetY + y);
+            ctx.lineTo(width, offsetY + y);
+            ctx.stroke();
+
+            // Label
+            // Avoid drawing at the very bottom edge if it's 0k (optional, but usually 0k is fine or omitted)
+            if (i < numFreqLabels) {
+               drawBadge(`${Math.round(freq/1000)}k`, width, offsetY + y + 10, 'right', '#cccccc');
+            }
+        }
+    };
+
+    drawFreqLabels(0);
+    drawBadge('L', 0, 15, 'left', '#ffffff');
+
+    if (results.channels >= 2) {
+        drawFreqLabels(height + 20);
+        drawBadge('R', 0, height + 35, 'left', '#ffffff');
+    }
 
   }, [results]);
 
@@ -370,12 +655,12 @@ export const LoudnessMeter: React.FC = () => {
 
       {results && (
         <div className="space-y-8 animate-fade-in">
-          {/* Integrated Loudness & Quality */}
+          {/* Integrated & Short-term Loudness */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
               <div className="space-y-1">
-                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Integrated Loudness</span>
-                <p className="text-neutral-400 text-[10px]">전체 평균 음압</p>
+                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Integrated LUFS</span>
+                <p className="text-neutral-400 text-[10px]">전체 평균 음압 (Long-term)</p>
               </div>
               <div className="text-right">
                 <span className={`text-2xl font-mono font-bold ${results.integrated > -14 ? 'text-white' : 'text-neutral-400'}`}>
@@ -384,6 +669,21 @@ export const LoudnessMeter: React.FC = () => {
               </div>
             </div>
 
+            <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Short-term LUFS</span>
+                <p className="text-neutral-400 text-[10px]">최대 구간 음압 (Max Short-term)</p>
+              </div>
+              <div className="text-right">
+                <span className={`text-2xl font-mono font-bold ${results.shortTerm > -9 ? 'text-red-500' : 'text-white'}`}>
+                  {results.shortTerm.toFixed(1)} <span className="text-xs font-normal text-neutral-600">LUFS</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quality & Peak */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">주파수 대역 품질</span>
@@ -398,6 +698,18 @@ export const LoudnessMeter: React.FC = () => {
                   {results.qualityScore === 'lossless' ? '주파수 무손실' :
                    results.qualityScore === 'high-lossy' ? '주파수 일부 손실' :
                    '주파수 완전 손실'}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">True Peak</span>
+                <p className="text-neutral-400 text-[10px]">최대 피크 레벨</p>
+              </div>
+              <div className="text-right">
+                <span className={`text-2xl font-mono font-bold ${results.peak > -1.0 ? 'text-red-500' : 'text-white'}`}>
+                  {results.peak.toFixed(1)} <span className="text-xs font-normal text-neutral-600">dBTP</span>
                 </span>
               </div>
             </div>
@@ -422,22 +734,64 @@ export const LoudnessMeter: React.FC = () => {
               <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Sample Rate</span>
               <span className="text-white font-mono font-bold">{results.sampleRate / 1000} <span className="text-neutral-500 text-xs">kHz</span></span>
             </div>
-            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center">
+            <div className="bg-[#111] p-4 rounded-xl border border-neutral-800 text-center relative overflow-hidden">
               <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase block mb-1">Channels</span>
-              <span className="text-white font-mono font-bold">
+              <span className="text-white font-mono font-bold block mb-2">
                 {results.channels === 1 ? 'Mono' : results.channels === 2 ? 'Stereo' : `${results.channels} Ch`}
               </span>
+              
+              {results.channels >= 2 && (
+                <div className="mt-2 pt-2 border-t border-neutral-800">
+                  <div className="flex justify-between text-[9px] text-neutral-600 mb-1 px-1">
+                    <span>-1</span>
+                    <span>0</span>
+                    <span>+1</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-neutral-800 rounded-full relative">
+                    {/* Center Marker */}
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-neutral-600 transform -translate-x-1/2"></div>
+                    
+                    {/* Indicator */}
+                    <div 
+                      className={`absolute top-0 bottom-0 w-2 h-2 -mt-0.5 rounded-full shadow-sm transition-all duration-500 ${
+                        results.phaseCorrelation < 0 ? 'bg-red-500 shadow-red-500/50' : 'bg-emerald-500 shadow-emerald-500/50'
+                      }`}
+                      style={{ 
+                        left: `${((results.phaseCorrelation + 1) / 2) * 100}%`,
+                        transform: 'translateX(-50%)'
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-[9px] text-neutral-500">Phase</span>
+                    <span className={`text-[9px] font-mono ${results.phaseCorrelation < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {results.phaseCorrelation.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+          
+          {/* Clipping Warning */}
+          {results.isClipping && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 animate-pulse">
+              <AlertTriangle size={16} className="text-red-500" />
+              <div>
+                <h4 className="text-red-500 text-xs font-bold">CLIPPING DETECTED</h4>
+                <p className="text-red-400/80 text-[10px]">오디오 신호가 0dBFS를 초과하여 클리핑이 발생했습니다. 볼륨을 줄이거나 리미터를 확인하세요.</p>
+              </div>
+            </div>
+          )}
 
-          {/* Frequency Spectrum */}
+          {/* Spectrogram */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Waves size={14} className="text-neutral-500" />
-              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Average Frequency Spectrum</span>
+              <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Spectrogram</span>
             </div>
             <div className="bg-[#050505] rounded-xl border border-neutral-900 p-4 overflow-hidden">
-              <svg ref={chartRef} className="w-full h-[200px]" />
+              <canvas ref={canvasRef} className="w-full h-auto" style={{ imageRendering: 'pixelated' }} />
             </div>
           </div>
 
@@ -481,25 +835,20 @@ export const LoudnessMeter: React.FC = () => {
                 * 업로드된 오디오 데이터를 스캔하여 정확한 피크값과 평균 음압 및 주파수 분포를 계산합니다. 
               </p>
               
-              <div className="border-t border-neutral-800/50 pt-3">
-                <p className="text-neutral-500 text-[10px] font-bold mb-2">Bitrate 품질 기준</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-neutral-500">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                    <span>128kbps 이하: 음질 나쁨</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
-                    <span>256kbps 이하: 음질 보통</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>320kbps 이하: 음질 우수</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>1000kbps 이상: 음질 매우 우수</span>
-                  </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-neutral-400 text-[10px] font-bold mb-1">LUFS (Loudness Units Full Scale)</h4>
+                  <p className="text-neutral-600 text-[9px]">
+                    사람이 실제로 느끼는 음량을 측정하는 표준 단위입니다. 
+                    스트리밍 플랫폼(Spotify, YouTube 등)은 보통 -14 LUFS를 기준으로 합니다.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-neutral-400 text-[10px] font-bold mb-1">True Peak</h4>
+                  <p className="text-neutral-600 text-[9px]">
+                    디지털 샘플 사이의 실제 아날로그 피크를 예측한 값입니다. 
+                    0dBTP를 넘으면 DAC 변환 시 클리핑(왜곡)이 발생할 수 있습니다.
+                  </p>
                 </div>
               </div>
             </div>
@@ -509,5 +858,3 @@ export const LoudnessMeter: React.FC = () => {
     </div>
   );
 };
-
-
