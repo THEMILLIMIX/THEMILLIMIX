@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, X, Sparkles, Layers, Plus, Minus, Award, Mic2, Users, Radio, Settings, AlertCircle, Cpu, BookOpen, Download, Loader2, CheckCircle2, Trash2, Lock, MessageCircle } from 'lucide-react';
+import { ShoppingBag, X, Sparkles, Layers, Plus, Minus, Award, Mic2, Users, Radio, Settings, AlertCircle, Cpu, BookOpen, Download, Loader2, CheckCircle2, Trash2, Lock, MessageCircle, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { ServiceCard } from './components/ServiceCard';
@@ -143,7 +143,17 @@ export default function App() {
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
   const [isMicSettingInfoChecked, setIsMicSettingInfoChecked] = useState(false);
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(true);
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(2); // 2 = March
   const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const handlePrevMonth = () => {
+    if (currentCalendarMonth > 2) setCurrentCalendarMonth(prev => prev - 1);
+  };
+
+  const handleNextMonth = () => {
+    if (currentCalendarMonth < 11) setCurrentCalendarMonth(prev => prev + 1);
+  };
   
   // Calculate total price
   const subtotal = cart.reduce((sum, item) => sum + (item.item.price * item.quantity), 0);
@@ -412,6 +422,113 @@ export default function App() {
             <p>© 2026 THE MILLI MIX. All Rights Reserved.</p>
         </div>
       </div>
+
+      {/* Welcome Modal */}
+      {isWelcomeModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 animate-fade-in">
+            <div className="bg-[#111] border border-neutral-800 rounded-2xl max-w-md w-full p-8 shadow-2xl relative">
+                <button 
+                    onClick={() => setIsWelcomeModalOpen(false)}
+                    className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors"
+                >
+                    <X size={20} />
+                </button>
+                
+                <div className="flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-neutral-800/50 rounded-full flex items-center justify-center text-white mb-6 border border-neutral-700">
+                        <Sparkles size={32} className="text-purple-400" />
+                    </div>
+                    
+                    <h3 className="text-xl font-bold text-white mb-2 tracking-wide">THE MILLI MIX</h3>
+                    <p className="text-xs text-neutral-500 uppercase tracking-widest mb-6">2026년 마감 캘린더</p>
+                    
+                    <div className="w-full bg-[#0a0a0a] p-6 rounded-xl border border-neutral-900 mb-8">
+                        {/* Calendar Header */}
+                        <div className="flex justify-between items-center mb-6 px-2">
+                            <button 
+                                onClick={handlePrevMonth}
+                                disabled={currentCalendarMonth <= 2}
+                                className={`p-1 transition-colors ${currentCalendarMonth <= 2 ? 'text-neutral-800 cursor-not-allowed' : 'text-neutral-600 hover:text-white'}`}
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span className="text-sm font-bold text-white tracking-widest">2026. {(currentCalendarMonth + 1).toString().padStart(2, '0')}</span>
+                            <button 
+                                onClick={handleNextMonth}
+                                disabled={currentCalendarMonth >= 11}
+                                className={`p-1 transition-colors ${currentCalendarMonth >= 11 ? 'text-neutral-800 cursor-not-allowed' : 'text-neutral-600 hover:text-white'}`}
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+
+                        {/* Calendar Grid */}
+                        <div className="grid grid-cols-7 gap-y-4 text-center mb-2">
+                            {/* Weekdays */}
+                            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+                                <div key={day} className="text-[10px] font-bold text-neutral-600 tracking-wider">
+                                    {day}
+                                </div>
+                            ))}
+                            
+                            {/* Empty cells for start of month */}
+                            {Array.from({ length: new Date(2026, currentCalendarMonth, 1).getDay() }).map((_, i) => (
+                                <div key={`empty-${i}`} />
+                            ))}
+                            
+                            {/* Days */}
+                            {Array.from({ length: new Date(2026, currentCalendarMonth + 1, 0).getDate() }).map((_, i) => {
+                                const day = i + 1;
+                                // Logic: 
+                                // March (month 2): 1-21 closed, 22-31 open.
+                                // April (month 3): 10-13, 23-26 closed.
+                                let isClosed = false;
+                                if (currentCalendarMonth === 2) {
+                                    if (day < 22) {
+                                        isClosed = true;
+                                    }
+                                } else if (currentCalendarMonth === 3) {
+                                    if ((day >= 10 && day <= 13) || (day >= 23 && day <= 26)) {
+                                        isClosed = true;
+                                    }
+                                }
+                                
+                                const isToday = currentCalendarMonth === 2 && day === 1; // Mark March 1st as today
+                                
+                                return (
+                                    <div key={day} className="flex flex-col items-center gap-1">
+                                        <span className={`text-xs font-medium ${isToday ? 'text-white bg-purple-600 w-6 h-6 rounded-full flex items-center justify-center' : 'text-neutral-400'}`}>
+                                            {day}
+                                        </span>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${isClosed ? 'bg-red-500/50' : 'bg-emerald-500'}`}></div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex justify-center gap-6 mt-6 pt-6 border-t border-neutral-800">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                <span className="text-[10px] text-neutral-400">예약 가능</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-red-500/50"></div>
+                                <span className="text-[10px] text-neutral-400">마감</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button 
+                        onClick={() => setIsWelcomeModalOpen(false)}
+                        className="w-full px-4 py-3.5 rounded-xl bg-white text-black text-sm font-bold hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                    >
+                        <span>서비스 둘러보기</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Live Mic Setting Confirmation Modal */}
       {isMicSettingModalOpen && (
@@ -1254,6 +1371,15 @@ export default function App() {
       <footer className="text-center py-24 text-[10px] text-neutral-600 tracking-[0.3em] font-light">
         THE MILLI MIX <br/><br/> © 2026 THE MILLI MIX. PROFESSIONAL AUDIO ENGINEERING.
       </footer>
+
+      {/* Calendar Floating Button */}
+      <button
+        onClick={() => setIsWelcomeModalOpen(true)}
+        className="fixed bottom-24 right-8 bg-[#1C1C1C] border border-neutral-800 text-neutral-400 p-3 rounded-full shadow-lg hover:bg-neutral-800 hover:text-white transition-colors z-50"
+        aria-label="View Calendar"
+      >
+        <Calendar size={28} />
+      </button>
 
       {/* KakaoTalk Floating Button */}
       <a
