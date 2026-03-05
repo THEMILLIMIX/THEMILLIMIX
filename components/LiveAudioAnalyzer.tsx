@@ -1,21 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Activity, AlertTriangle, StopCircle, BarChart3, Waves, RefreshCw } from 'lucide-react';
+import { Mic, Activity, AlertTriangle, StopCircle, BarChart3, Waves, RefreshCw, Bot, User } from 'lucide-react';
 
 interface AnalysisResults {
   shortTermLufs: number; // 3s average
+  fiveSecondLufs: number; // 5s average
   integratedLufs: number; // Since start
+  diffFromInitial: number; // Difference from initial LUFS
   peak: number; // Max Peak
   currentPeak: number; // Real-time Peak
   cutoffFreq: number;
+  aiScore: number; // 0-100 probability
   sampleRate: number;
   channels: number;
   isClipping: boolean;
 }
 
-export const LiveAudioAnalyzer: React.FC = () => {
+interface LiveAudioAnalyzerProps {
+  mode?: 'meter' | 'verification' | 'calibration';
+}
+
+export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'meter' }) => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<AnalysisResults | null>(null);
+  const [targetLufs, setTargetLufs] = useState(-14); // User-defined target
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -28,7 +36,9 @@ export const LiveAudioAnalyzer: React.FC = () => {
   const spectrogramDataRef = useRef<Uint8Array[]>([]);
   const maxSpectrogramHistory = 800; // Width of canvas
   const lufsBufferRef = useRef<{ value: number; time: number }[]>([]);
+  const fiveSecondBufferRef = useRef<{ value: number; time: number }[]>([]);
   const longTermLufsBufferRef = useRef<{ value: number; time: number }[]>([]);
+  const initialLufsRef = useRef<number | null>(null);
 
   const resetMeters = () => {
     setResults(prev => prev ? { ...prev, peak: -120, integratedLufs: -120 } : null);
@@ -95,7 +105,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
       analyzeStream();
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setError('마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
+      setError(`마이크 접근 실패: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -117,6 +127,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
     spectrogramDataRef.current = [];
     lufsBufferRef.current = [];
     longTermLufsBufferRef.current = [];
+    initialLufsRef.current = null;
   };
 
 
@@ -170,17 +181,23 @@ export const LiveAudioAnalyzer: React.FC = () => {
       // We add a small epsilon to avoid log(0)
       const shortTermLufs = -0.691 + 10 * Math.log10(avgMeanSquare || 1e-10);
       
-      // Calculate 9s Moving Average LUFS (Long-term)
-      longTermLufsBufferRef.current.push({ value: currentMeanSquare, time: now });
+      if (initialLufsRef.current === null && shortTermLufs > -100) {
+        initialLufsRef.current = shortTermLufs;
+      }
+      const diffFromInitial = shortTermLufs - (initialLufsRef.current ?? shortTermLufs);
       
-      // Keep only last 9000ms
-      while(longTermLufsBufferRef.current.length > 0 && now - longTermLufsBufferRef.current[0].time > 9000) {
-        longTermLufsBufferRef.current.shift();
+      // Calculate 5s Moving Average LUFS (for Calibration)
+      fiveSecondBufferRef.current.push({ value: currentMeanSquare, time: now });
+      
+      // Keep only last 5000ms
+      while(fiveSecondBufferRef.current.length > 0 && now - fiveSecondBufferRef.current[0].time > 5000) {
+        fiveSecondBufferRef.current.shift();
       }
 
-      const totalLongTermMeanSquare = longTermLufsBufferRef.current.reduce((acc, item) => acc + item.value, 0);
-      const avgLongTermMeanSquare = totalLongTermMeanSquare / (longTermLufsBufferRef.current.length || 1);
-      const integratedLufs = -0.691 + 10 * Math.log10(avgLongTermMeanSquare || 1e-10);
+      const totalFiveSecondMeanSquare = fiveSecondBufferRef.current.reduce((acc, item) => acc + item.value, 0);
+      const avgFiveSecondMeanSquare = totalFiveSecondMeanSquare / (fiveSecondBufferRef.current.length || 1);
+      const fiveSecondLufs = -0.691 + 10 * Math.log10(avgFiveSecondMeanSquare || 1e-10);
+      const integratedLufs = fiveSecondLufs; // Fallback to 5s average as a placeholder
 
       const peakDb = 20 * Math.log10(peak || 1e-10);
 
@@ -196,19 +213,43 @@ export const LiveAudioAnalyzer: React.FC = () => {
       const nyquist = currentSampleRate / 2;
       const cutoffFreq = (cutoffBin / bufferLength) * nyquist;
 
-      // 4. Update Results State
+      // 4. AI Detection Logic (Heuristic)
+      // Based on High Frequency Cutoff and Spectral Characteristics
+      // Many AI models have hard cutoffs around 16kHz or 11kHz
+      let aiProbability = 0;
+      
+      // Factor 1: Cutoff Frequency
+      if (cutoffFreq < 11000) aiProbability += 80; // Very low cutoff -> Likely AI/Low Quality
+      else if (cutoffFreq < 16500) aiProbability += 60; // Common AI cutoff (~16kHz)
+      else if (cutoffFreq < 18000) aiProbability += 30; // Suspicious
+      else aiProbability += 0; // > 18kHz -> Likely Human/High Quality
+
+      // Factor 2: Spectral Flatness (Variance) in high frequencies
+      // AI generated audio often has different noise characteristics in high bands
+      // (This is a simplified placeholder for more complex spectral analysis)
+      
+      // Smoothing the score
+      const prevAiScore = results ? results.aiScore : 0;
+      const currentAiScore = prevAiScore * 0.95 + aiProbability * 0.05;
+
+      // 5. Update Results State
       setResults(prev => {
         const currentShortTermLufs = Math.max(-120, shortTermLufs);
+        const currentFiveSecondLufs = Math.max(-120, fiveSecondLufs);
         const currentIntegratedLufs = Math.max(-120, integratedLufs);
+        const currentDiffFromInitial = diffFromInitial;
         const currentPeak = Math.max(-120, peakDb);
         
         if (!prev) {
             return {
                 shortTermLufs: currentShortTermLufs,
+                fiveSecondLufs: currentFiveSecondLufs,
                 integratedLufs: currentIntegratedLufs,
+                diffFromInitial: currentDiffFromInitial,
                 peak: currentPeak,
                 currentPeak: currentPeak,
                 cutoffFreq,
+                aiScore: aiProbability,
                 sampleRate: currentSampleRate,
                 channels: 1,
                 isClipping: peak >= 1.0
@@ -217,10 +258,13 @@ export const LiveAudioAnalyzer: React.FC = () => {
 
         return {
             shortTermLufs: currentShortTermLufs,
+            fiveSecondLufs: currentFiveSecondLufs,
             integratedLufs: currentIntegratedLufs,
+            diffFromInitial: currentDiffFromInitial,
             peak: Math.max(currentPeak, prev.peak), // Hold max peak
             currentPeak: currentPeak, // Real-time peak for reference
             cutoffFreq: Math.max(cutoffFreq, prev.cutoffFreq), // Hold max frequency
+            aiScore: currentAiScore,
             sampleRate: currentSampleRate,
             channels: 1,
             isClipping: peak >= 1.0 || prev.isClipping // Hold clipping indicator
@@ -403,7 +447,8 @@ export const LiveAudioAnalyzer: React.FC = () => {
 
       {results && (
         <div className="space-y-8 animate-fade-in">
-          {/* RMS & Peak */}
+          {/* RMS & Peak - Only show in meter mode */}
+          {mode === 'meter' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex flex-col justify-between gap-4">
               <div className="flex items-center justify-between">
@@ -437,13 +482,95 @@ export const LiveAudioAnalyzer: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Quality & Info */}
+          {/* AI Verification - Only show in verification mode */}
+          {mode === 'verification' && (
+          <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800">
+             <div className="flex items-center justify-between mb-4">
+                <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Source Verification (Beta)</span>
+                <div className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                    results.aiScore > 50 
+                    ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' 
+                    : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                }`}>
+                    {results.aiScore > 50 ? <Bot size={12} /> : <User size={12} />}
+                    {results.aiScore > 50 ? 'Likely AI / Low Quality' : 'Likely Human / High Quality'}
+                </div>
+             </div>
+             
+             <div className="relative h-4 bg-neutral-900 rounded-full overflow-hidden">
+                {/* Background Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-neutral-800 to-purple-500/20"></div>
+                
+                {/* Indicator */}
+                <div 
+                    className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-300 ease-out"
+                    style={{ left: `${Math.min(100, Math.max(0, results.aiScore))}%` }}
+                ></div>
+             </div>
+             <div className="flex justify-between mt-2 text-[10px] text-neutral-500 font-mono">
+                <span>HUMAN</span>
+                <span>AI PROBABILITY: {Math.round(results.aiScore)}%</span>
+                <span>AI</span>
+             </div>
+          </div>
+          )}
+
+          {/* Gain Calibration Assistant - Only show in calibration mode */}
+          {mode === 'calibration' && (
+          <div className="space-y-6">
+            <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800">
+               <div className="flex items-center justify-between mb-4">
+                  <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Gain Calibration Assistant</span>
+                  <div className="flex items-center gap-2">
+                      <span className="text-neutral-500 text-[10px]">Target:</span>
+                      <input 
+                          type="number"
+                          value={targetLufs}
+                          onChange={(e) => setTargetLufs(Number(e.target.value))}
+                          className="w-16 bg-black border border-neutral-800 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-neutral-600"
+                      />
+                      <span className="text-neutral-500 text-[10px]">LUFS</span>
+                  </div>
+               </div>
+               
+               {(() => {
+                  const adjustment = targetLufs - results.fiveSecondLufs;
+                  const isGood = Math.abs(adjustment) <= 0.5;
+                  
+                  return (
+                      <div className="flex flex-col items-center gap-4">
+                          <div className={`text-4xl font-mono font-bold ${isGood ? 'text-emerald-500' : 'text-white'}`}>
+                              {adjustment > 0 ? '+' : ''}{adjustment.toFixed(1)} <span className="text-sm font-normal text-neutral-600">dB</span>
+                          </div>
+                          <div className="text-neutral-400 text-sm">
+                              {isGood ? 'Perfect Level' : adjustment > 0 ? 'Increase gain by this amount' : 'Decrease gain by this amount'}
+                          </div>
+                      </div>
+                  );
+               })()}
+            </div>
+
+            <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800">
+               <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase mb-4 block">How to Use</span>
+               <ul className="text-neutral-400 text-xs space-y-2 list-decimal list-inside">
+                  <li>Target LUFS 설정 ( 예시 -20 )</li>
+                  <li>표시된 dB만큼 마이크 게인(Gain)을 조정하세요.<br/>
+                      <span className="text-neutral-500">( + 볼륨을 키워주세요 / - 볼륨을 낮춰주세요 )</span></li>
+                  <li>±0.5dB 이내로 들어오면 'Perfect Level'입니다.</li>
+               </ul>
+            </div>
+          </div>
+          )}
+
+          {/* Quality & Info - Show in both modes but maybe simplified? Keeping for now */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800 flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Input Quality</span>
                 <p className="text-neutral-400 text-[10px]">최대 주파수 응답: ~{Math.round(results.cutoffFreq / 100) / 10}kHz</p>
+                <p className="text-neutral-400 text-[10px]">초기 볼륨 대비: {results.diffFromInitial > 0 ? '+' : ''}{results.diffFromInitial.toFixed(1)} dB</p>
               </div>
               <div className="text-right">
                 <span className={`text-sm font-bold px-3 py-1 rounded-full uppercase tracking-tighter ${

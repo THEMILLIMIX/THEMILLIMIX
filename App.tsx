@@ -112,6 +112,8 @@ export default function App() {
   const [isCommercial, setIsCommercial] = useState(false);
   const [isCollaboration, setIsCollaboration] = useState(false);
   const [collabPassword, setCollabPassword] = useState('');
+  const [speakupPassword, setSpeakupPassword] = useState('');
+
   const [collabPasswords, setCollabPasswords] = useState<{pw: string, rate: number}[]>(() => {
     const saved = localStorage.getItem('milli_collab_passwords');
     if (saved) {
@@ -139,7 +141,7 @@ export default function App() {
     localStorage.setItem('milli_collab_passwords', btoa(JSON.stringify(collabPasswords)));
   }, [collabPasswords]);
   
-  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness' | 'speakup' | 'speakup_content'>('home');
   const [mixSubView, setMixSubView] = useState<'meter' | 'pitch'>('meter');
   const [meterType, setMeterType] = useState<'file' | 'live'>('file');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -1360,6 +1362,62 @@ export default function App() {
                     )}
                 </div>
             </div>
+        ) : currentView === 'speakup' ? (
+            // SPEAKUP Dedicated View
+            <div className="animate-fade-in-up">
+                <div className="max-w-3xl mx-auto">
+                    <div className="mb-8">
+                        <button 
+                            onClick={() => setCurrentView('collaboration')}
+                            className="flex items-center gap-2 text-neutral-500 hover:text-white transition-colors text-xs uppercase tracking-wider"
+                        >
+                            <ChevronLeft size={14} />
+                            Back to Partners
+                        </button>
+                    </div>
+
+                    <div className="bg-[#0a0a0a] border border-neutral-900 rounded-2xl p-12 text-center relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500"></div>
+                        
+                        <div className="w-32 h-32 mx-auto bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden border-4 border-neutral-800 mb-8 shadow-2xl">
+                            <img 
+                                src="https://i.ibb.co/1tYkc440/b-B1mw-OQh-400x400.jpg" 
+                                alt="SPEAKUP Logo" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                            />
+                        </div>
+                        
+                        <h2 className="text-4xl font-bold text-white mb-4 tracking-widest uppercase">S P E A K U P</h2>
+                        <p className="text-neutral-400 text-sm mb-12 max-w-lg mx-auto leading-relaxed">
+                            음악 교류 커뮤니티 스피크업(SPEAKUP) 멤버들을 위한 전용 공간입니다.<br/>
+                            특별한 혜택과 함께 더 나은 음악 활동을 지원합니다.
+                        </p>
+
+                        <div className="mt-12 max-w-xs mx-auto">
+                            <input 
+                                type="password"
+                                value={speakupPassword}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSpeakupPassword(val);
+                                    if (val === 'SPEAKUP_AUDIO') {
+                                        setCurrentView('speakup_content');
+                                    }
+                                }}
+                                placeholder="비밀번호를 입력하세요"
+                                className="w-full bg-[#111] border border-neutral-800 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-700 focus:outline-none focus:border-neutral-700 transition-colors text-center"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ) : currentView === 'speakup_content' ? (
+            <div className="min-h-screen bg-[#050505] p-8">
+                <div className="max-w-3xl mx-auto">
+                    <LiveAudioAnalyzer mode="calibration" />
+                </div>
+            </div>
         ) : (
             // Collaboration View
             <div className="animate-fade-in-up">
@@ -1377,7 +1435,10 @@ export default function App() {
                                 <h3 className="text-neutral-400 text-xs font-bold tracking-widest uppercase">Partners</h3>
                             </div>
                             <div className="space-y-6">
-                                <div className="flex items-center justify-between p-4 bg-[#111] rounded-xl border border-neutral-900">
+                                <div 
+                                    onClick={() => setCurrentView('speakup')}
+                                    className="flex items-center justify-between p-4 bg-[#111] rounded-xl border border-neutral-900 cursor-pointer hover:border-neutral-700 transition-all group"
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden border border-neutral-800">
                                             <img 
