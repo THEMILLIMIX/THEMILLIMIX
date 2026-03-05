@@ -654,7 +654,7 @@ export default function App() {
       <header className="pt-32 pb-16 text-center">
         <div className="animate-fade-in-down">
             <h1 className="text-6xl md:text-8xl font-light tracking-[0.3em] text-white mb-6">THE MILLI MIX</h1>
-            <p className="text-sm md:text-base text-neutral-500 tracking-[0.6em] uppercase">믹싱 마스터링 커미션</p>
+            <p className="text-sm md:text-base text-neutral-500 tracking-[0.6em] uppercase">MIX & MASTERING</p>
         </div>
         
         <nav className="flex flex-col items-center justify-center gap-6 mt-24 text-[11px] font-medium tracking-widest text-neutral-500 uppercase">
