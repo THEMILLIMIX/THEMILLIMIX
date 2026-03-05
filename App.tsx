@@ -5,6 +5,7 @@ import html2canvas from "html2canvas";
 import { ServiceCard } from './components/ServiceCard';
 import { OptionCard } from './components/OptionCard';
 import { LoudnessMeter } from './components/LoudnessMeter';
+import { LiveAudioAnalyzer } from './components/LiveAudioAnalyzer';
 import { COMMERCIAL_OPTION } from './constants';
 import { CartItem, ServiceItem } from './types';
 
@@ -140,6 +141,7 @@ export default function App() {
   
   const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness'>('home');
   const [mixSubView, setMixSubView] = useState<'meter' | 'pitch'>('meter');
+  const [meterType, setMeterType] = useState<'file' | 'live'>('file');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
@@ -1318,10 +1320,34 @@ export default function App() {
                     
                     {mixSubView === 'meter' ? (
                         <>
-                            <div className="text-center mb-12">
-                                <p className="text-xs text-neutral-500 font-light">음압 측정 도구입니다.</p>
+                            <div className="text-center mb-8">
+                                <p className="text-xs text-neutral-500 font-light">음압 측정 및 오디오 분석 도구입니다.</p>
                             </div>
-                            <LoudnessMeter />
+                            
+                            <div className="flex justify-center gap-4 mb-8">
+                                <button 
+                                    onClick={() => setMeterType('file')}
+                                    className={`px-4 py-2 rounded-full text-xs font-medium transition-all ${
+                                        meterType === 'file' 
+                                        ? 'bg-white text-black' 
+                                        : 'bg-neutral-900 text-neutral-500 hover:text-neutral-300'
+                                    }`}
+                                >
+                                    File Analyzer
+                                </button>
+                                <button 
+                                    onClick={() => setMeterType('live')}
+                                    className={`px-4 py-2 rounded-full text-xs font-medium transition-all ${
+                                        meterType === 'live' 
+                                        ? 'bg-white text-black' 
+                                        : 'bg-neutral-900 text-neutral-500 hover:text-neutral-300'
+                                    }`}
+                                >
+                                    Live Audio Analyzer
+                                </button>
+                            </div>
+
+                            {meterType === 'file' ? <LoudnessMeter /> : <LiveAudioAnalyzer />}
                         </>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-32 animate-fade-in">

@@ -1,5 +1,5 @@
 {
   "name": "THE MILLI MIX",
   "description": "Professional Audio Engineering Service",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["microphone"]
 }
