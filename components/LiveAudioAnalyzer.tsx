@@ -522,7 +522,15 @@ export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'me
           <div className="space-y-6">
             <div className="bg-[#111] p-6 rounded-2xl border border-neutral-800">
                <div className="flex items-center justify-between mb-4">
-                  <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Gain Calibration Assistant</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-500 text-[10px] font-bold tracking-widest uppercase">Gain Calibration Assistant</span>
+                    <button 
+                        onClick={() => initialLufsRef.current = null}
+                        className="text-xs text-neutral-400 hover:text-white underline font-bold"
+                    >
+                        Reset
+                    </button>
+                  </div>
                   <div className="flex items-center gap-2">
                       <span className="text-neutral-500 text-[10px]">Target:</span>
                       <input 
@@ -544,6 +552,9 @@ export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'me
                           <div className={`text-4xl font-mono font-bold ${isGood ? 'text-emerald-500' : 'text-white'}`}>
                               {adjustment > 0 ? '+' : ''}{adjustment.toFixed(1)} <span className="text-sm font-normal text-neutral-600">dB</span>
                           </div>
+                          <div className="text-neutral-500 text-[10px] font-mono">
+                              초기 볼륨 대비: {results.diffFromInitial > 0 ? '+' : ''}{results.diffFromInitial.toFixed(1)} dB
+                          </div>
                           <div className="text-neutral-400 text-sm">
                               {isGood ? 'Perfect Level' : adjustment > 0 ? 'Increase gain by this amount' : 'Decrease gain by this amount'}
                           </div>
@@ -559,6 +570,7 @@ export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'me
                   <li>표시된 dB만큼 마이크 게인(Gain)을 조정하세요.<br/>
                       <span className="text-neutral-500">( + 볼륨을 키워주세요 / - 볼륨을 낮춰주세요 )</span></li>
                   <li>±0.5dB 이내로 들어오면 'Perfect Level'입니다.</li>
+                  <li>Reset 버튼을 클릭하면 초기 볼륨 기준(dB)이 초기화되어, 새로운 기준으로 다시 평균 음압을 측정할 수 있습니다.</li>
                </ul>
             </div>
           </div>
