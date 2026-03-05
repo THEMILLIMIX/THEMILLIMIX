@@ -124,6 +124,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
   const analyzeStream = () => {
     if (!analyserRef.current || !audioContextRef.current || !lufsAnalyserRef.current) return;
 
+    const currentSampleRate = audioContextRef.current.sampleRate;
     const analyser = analyserRef.current;
     const lufsAnalyser = lufsAnalyserRef.current;
     const bufferLength = analyser.frequencyBinCount;
@@ -132,6 +133,9 @@ export const LiveAudioAnalyzer: React.FC = () => {
     const lufsDataArray = new Float32Array(bufferLength);
 
     const draw = () => {
+      // Check if context is still active
+      if (!audioContextRef.current) return;
+
       analyser.getByteFrequencyData(dataArray);
       analyser.getFloatTimeDomainData(timeDomainArray);
       lufsAnalyser.getFloatTimeDomainData(lufsDataArray);
@@ -189,7 +193,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
           break;
         }
       }
-      const nyquist = audioContextRef.current!.sampleRate / 2;
+      const nyquist = currentSampleRate / 2;
       const cutoffFreq = (cutoffBin / bufferLength) * nyquist;
 
       // 4. Update Results State
@@ -205,7 +209,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
                 peak: currentPeak,
                 currentPeak: currentPeak,
                 cutoffFreq,
-                sampleRate: audioContextRef.current!.sampleRate,
+                sampleRate: currentSampleRate,
                 channels: 1,
                 isClipping: peak >= 1.0
             };
@@ -217,7 +221,7 @@ export const LiveAudioAnalyzer: React.FC = () => {
             peak: Math.max(currentPeak, prev.peak), // Hold max peak
             currentPeak: currentPeak, // Real-time peak for reference
             cutoffFreq: Math.max(cutoffFreq, prev.cutoffFreq), // Hold max frequency
-            sampleRate: audioContextRef.current!.sampleRate,
+            sampleRate: currentSampleRate,
             channels: 1,
             isClipping: peak >= 1.0 || prev.isClipping // Hold clipping indicator
         };
