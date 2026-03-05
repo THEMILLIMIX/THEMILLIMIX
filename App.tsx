@@ -139,6 +139,7 @@ export default function App() {
   }, [collabPasswords]);
   
   const [currentView, setCurrentView] = useState<'home' | 'portfolio' | 'system' | 'guide' | 'collaboration' | 'loudness'>('home');
+  const [mixSubView, setMixSubView] = useState<'meter' | 'pitch'>('meter');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(false);
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
@@ -694,7 +695,7 @@ export default function App() {
                     onClick={() => setCurrentView('loudness')}
                     className={`transition-colors border-b pb-1 ${currentView === 'loudness' ? 'text-white border-white' : 'hover:text-white border-transparent'}`}
                 >
-                    Meter
+                    Mix
                 </button>
             </div>
         </nav>
@@ -1290,14 +1291,47 @@ export default function App() {
                 </div>
             </div>
         ) : currentView === 'loudness' ? (
-            // Meter View
+            // Mix View (Meter & Pitch)
             <div className="animate-fade-in-up">
                 <div className="max-w-3xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-2xl font-normal text-white mb-4">Meter</h2>
-                        <p className="text-xs text-neutral-500 font-light">음압 측정 도구입니다.</p>
+                    {/* Tab Navigation */}
+                    <div className="flex justify-center gap-12 mb-12 border-b border-neutral-800 pb-4">
+                        <button 
+                            onClick={() => setMixSubView('meter')}
+                            className={`text-2xl font-light transition-all relative ${mixSubView === 'meter' ? 'text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+                        >
+                            Meter
+                            {mixSubView === 'meter' && (
+                                <span className="absolute -bottom-4 left-0 w-full h-0.5 bg-white animate-fade-in"></span>
+                            )}
+                        </button>
+                        <button 
+                            onClick={() => setMixSubView('pitch')}
+                            className={`text-2xl font-light transition-all relative ${mixSubView === 'pitch' ? 'text-white' : 'text-neutral-600 hover:text-neutral-400'}`}
+                        >
+                            Ai Mix Mastering
+                            {mixSubView === 'pitch' && (
+                                <span className="absolute -bottom-4 left-0 w-full h-0.5 bg-white animate-fade-in"></span>
+                            )}
+                        </button>
                     </div>
-                    <LoudnessMeter />
+                    
+                    {mixSubView === 'meter' ? (
+                        <>
+                            <div className="text-center mb-12">
+                                <p className="text-xs text-neutral-500 font-light">음압 측정 도구입니다.</p>
+                            </div>
+                            <LoudnessMeter />
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-32 animate-fade-in">
+                            <div className="w-16 h-16 bg-neutral-900/50 rounded-full flex items-center justify-center mb-6 border border-neutral-800">
+                                <Settings className="w-8 h-8 text-neutral-500 animate-[spin_3s_linear_infinite]" />
+                            </div>
+                            <h3 className="text-xl font-light text-white mb-2">서비스 개발중</h3>
+                            <p className="text-sm text-neutral-500 font-light">더 나은 서비스를 위해 준비하고 있습니다.</p>
+                        </div>
+                    )}
                 </div>
             </div>
         ) : (
