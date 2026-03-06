@@ -545,7 +545,7 @@ export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'me
                
                {(() => {
                   const adjustment = targetLufs - results.fiveSecondLufs;
-                  const isGood = Math.abs(adjustment) <= 0.5;
+                  const isGood = Math.abs(adjustment) <= 1.0;
                   
                   return (
                       <div className="flex flex-col items-center gap-4">
@@ -569,7 +569,7 @@ export const LiveAudioAnalyzer: React.FC<LiveAudioAnalyzerProps> = ({ mode = 'me
                   <li>Target LUFS 설정 ( 예시 -20 )</li>
                   <li>표시된 dB만큼 마이크 게인(Gain)을 조정하세요.<br/>
                       <span className="text-neutral-500">( + 볼륨을 키워주세요 / - 볼륨을 낮춰주세요 )</span></li>
-                  <li>±0.5dB 이내로 들어오면 'Perfect Level'입니다.</li>
+                  <li>±1dB 이내로 들어오면 'Perfect Level'입니다.</li>
                   <li>Reset 버튼을 클릭하면 초기 볼륨 기준(dB)이 초기화되어, 새로운 기준으로 다시 평균 음압을 측정할 수 있습니다.</li>
                </ul>
             </div>
