@@ -149,7 +149,10 @@ export default function App() {
   const [isMicSettingModalOpen, setIsMicSettingModalOpen] = useState(false);
   const [isMicSettingInfoChecked, setIsMicSettingInfoChecked] = useState(false);
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(true);
-  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(2); // 2 = March
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(() => {
+    const kstNow = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    return kstNow.getMonth();
+  });
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handlePrevMonth = () => {
@@ -457,7 +460,9 @@ export default function App() {
                             >
                                 <ChevronLeft size={16} />
                             </button>
-                            <span className="text-sm font-bold text-white tracking-widest">2026. {(currentCalendarMonth + 1).toString().padStart(2, '0')}</span>
+                            <span className="text-sm font-bold text-white tracking-widest">
+                                {new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"})).getFullYear()}. {(currentCalendarMonth + 1).toString().padStart(2, '0')}
+                            </span>
                             <button 
                                 onClick={handleNextMonth}
                                 disabled={currentCalendarMonth >= 11}
@@ -477,17 +482,29 @@ export default function App() {
                             ))}
                             
                             {/* Empty cells for start of month */}
-                            {Array.from({ length: new Date(2026, currentCalendarMonth, 1).getDay() }).map((_, i) => (
+                            {Array.from({ length: new Date(new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"})).getFullYear(), currentCalendarMonth, 1).getDay() }).map((_, i) => (
                                 <div key={`empty-${i}`} />
                             ))}
                             
                             {/* Days */}
-                            {Array.from({ length: new Date(2026, currentCalendarMonth + 1, 0).getDate() }).map((_, i) => {
+                            {Array.from({ length: new Date(new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"})).getFullYear(), currentCalendarMonth + 1, 0).getDate() }).map((_, i) => {
                                 const day = i + 1;
+                                const kstNow = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+                                const kstYear = kstNow.getFullYear();
+                                const kstMonth = kstNow.getMonth();
+                                const kstDay = kstNow.getDate();
+
                                 // Logic: 
+                                // Past days in current month are closed
                                 // March (month 2): 1-21 closed, 22-31 open.
                                 // April (month 3): 10-13, 23-26 closed.
                                 let isClosed = false;
+                                
+                                // Auto-close past days
+                                if (kstYear === 2026 && currentCalendarMonth === kstMonth && day < kstDay) {
+                                    isClosed = true;
+                                }
+
                                 if (currentCalendarMonth === 2) {
                                     if (day < 22) {
                                         isClosed = true;
@@ -498,7 +515,7 @@ export default function App() {
                                     }
                                 }
                                 
-                                const isToday = currentCalendarMonth === 2 && day === 1; // Mark March 1st as today
+                                const isToday = currentCalendarMonth === kstMonth && day === kstDay && kstYear === 2026;
                                 
                                 return (
                                     <div key={day} className="flex flex-col items-center gap-1">

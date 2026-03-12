@@ -32,7 +32,7 @@ export function PitchEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playerRef = useRef<Tone.Player | null>(null);
   const pitchShiftRef = useRef<Tone.PitchShift | null>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const playbackIndexRef = useRef<number>(0);
 

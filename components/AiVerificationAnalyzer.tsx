@@ -74,6 +74,33 @@ export const AiVerificationAnalyzer: React.FC = () => {
       return Math.sqrt(flux) / prevSpectrum.length;
   };
 
+  // Helper: Calculate Spectral Features (Centroid & Rolloff)
+  const calculateSpectralFeatures = (freqData: Uint8Array, sampleRate: number) => {
+      let totalEnergy = 0;
+      let weightedSum = 0;
+      for (let i = 0; i < freqData.length; i++) {
+          totalEnergy += freqData[i];
+          weightedSum += freqData[i] * i;
+      }
+      
+      const centroidBin = totalEnergy > 0 ? weightedSum / totalEnergy : 0;
+      const centroid = centroidBin * (sampleRate / 2) / freqData.length;
+      
+      let cumulativeEnergy = 0;
+      let rolloffBin = 0;
+      const rolloffThreshold = totalEnergy * 0.85;
+      for (let i = 0; i < freqData.length; i++) {
+          cumulativeEnergy += freqData[i];
+          if (cumulativeEnergy >= rolloffThreshold) {
+              rolloffBin = i;
+              break;
+          }
+      }
+      const rolloffFreq = rolloffBin * (sampleRate / 2) / freqData.length;
+      
+      return { centroid, rolloffFreq };
+  };
+
   const analyzeAudio = async () => {
     if (!file) return;
     setIsAnalyzing(true);
